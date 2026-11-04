@@ -15,6 +15,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
  * Flink streaming job: Kafka → filter price events → 5-min tumbling windows
@@ -52,8 +53,13 @@ public final class TrendJob {
         // and mark partitions idle if no events arrive for 1 minute so the watermark keeps progressing.
         WatermarkStrategy<TickEvent> watermarks = WatermarkStrategy
                 .<TickEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-                .withTimestampAssigner((event, recordTimestamp) ->
-                        extractEpochMillis(event))
+                .withTimestampAssigner((event, recordTimestamp) -> {
+                  try {
+                    return extractEpochMillis(event);
+                  } catch (DateTimeParseException exception) {
+                    return recordTimestamp >= 0 ? recordTimestamp : 0L;
+                    }
+                  })
                 .withIdleness(Duration.ofMinutes(1));
 
         DataStream<TickEvent> ticks = env.fromSource(
