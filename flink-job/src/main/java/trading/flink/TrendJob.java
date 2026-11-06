@@ -6,6 +6,7 @@ import org.apache.flink.connector.kafka.source.enumerator.initializer.OffsetsIni
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
+import trading.common.CrossoverEvent;
 import trading.common.EmaResult;
 import trading.common.TickEvent;
 
@@ -19,7 +20,7 @@ import java.time.format.DateTimeParseException;
 
 /**
  * Flink streaming job: Kafka → filter price events → 5-min tumbling windows
- * → EMA-38 and EMA-100 per symbol → print to stdout.
+ * → EMA-38 and EMA-100 per symbol (Query 1) → crossover detection (Query 2).
  *
  * <p>Environment variables:
  * <ul>
@@ -74,6 +75,13 @@ public final class TrendJob {
                 .process(new EmaWindowFunction());
 
         emas.print("EMA");
+
+        // ── Query 2: Crossover detection (buy/sell advisories) ────────────────
+        DataStream<CrossoverEvent> crossovers = emas
+                .keyBy(EmaResult::symbol)
+                .process(new CrossoverDetector());
+
+        crossovers.print("CROSSOVER");
 
         env.execute("Trading Trend Detection");
     }
