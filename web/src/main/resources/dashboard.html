@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trading EMA Monitor</title>
+    <link rel="stylesheet" href="/dashboard.css" />
+  </head>
+  <body>
+    <main>
+      <header class="page-header">
+        <div>
+          <h1>EMA pulse</h1>
+        </div>
+        <div id="status" class="status">Connecting...</div>
+      </header>
+
+      <section class="panel">
+        <div class="replay-controls">
+          <button id="replayToggle" type="button">Play time analysis</button>
+          <label for="replaySpeed">Speed</label>
+          <select id="replaySpeed" aria-label="Replay speed">
+            <option value="0.5">0.5x</option>
+            <option value="1">1x</option>
+            <option value="2">2x</option>
+          </select>
+          <input id="replayTimeline" type="range" min="0" max="0" value="0" disabled aria-label="Replay timeline" />
+          <span id="replayTime" class="replay-time">Live mode</span>
+        </div>
+        <div class="chart-layout">
+          <aside class="stock-panel">
+            <div class="section-heading">
+              <div>
+                <h2>Stocks</h2>
+              </div>
+            </div>
+            <input
+              id="symbolSearch"
+              class="symbol-search"
+              type="search"
+              placeholder="Search stocks"
+              aria-label="Search stocks"
+            />
+            <select id="symbols" multiple aria-label="Select stocks"></select>
+            <p class="hint">Shift-click or Ctrl/Cmd-click to select multiple.</p>
+          </aside>
+          <div class="chart-frame">
+            <canvas id="chart" width="1300" height="560"></canvas>
+            <div id="chartTooltip" class="chart-tooltip" role="status" aria-live="polite"></div>
+          </div>
+          <aside class="quote-panel">
+            <h2>Latest values</h2>
+            <div id="quotes" class="empty-state">Select a stock</div>
+          </aside>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="section-heading">
+          <div>
+            <h2>Latest EMA readings</h2>
+          </div>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Symbol</th>
+                <th>Window end</th>
+                <th>Last price</th>
+                <th>EMA 38</th>
+                <th>EMA 100</th>
+                <th>Received</th>
+              </tr>
+            </thead>
+            <tbody id="rows"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+    <script src="/dashboard.js"></script>
+  </body>
+</html>
