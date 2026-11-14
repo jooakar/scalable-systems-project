@@ -77,6 +77,23 @@ Arguments are CSV files or directories (a directory's files are replayed in name
 | `PARTITIONS`        | `4`              | Partitions when creating topic    |
 | `RATE`              | `0`              | Max events/s, `0` = unlimited     |
 
+## Web Dashboard
+
+The web API endpoints are:
+
+| Endpoint               | Purpose                                     |
+| ---------------------- | ------------------------------------------- |
+| `/api/symbols`         | Lists symbols with stored EMA or price data |
+| `/api/trends/latest`   | Returns the latest result rows              |
+| `/api/trends/{symbol}` | Returns historical rows for one symbol      |
+| `/health`              | Checks database connectivity                |
+| `/metrics`             | Exposes Prometheus metrics                  |
+
+Compose starts Kafka, Flink, TimescaleDB, and the web service, but it does not
+automatically submit the Flink job or replay CSV data. The web dashboard can
+start without EMA data, but the Flink job must be submitted to populate
+TimescaleDB.
+
 ## Run the Flink Job
 
 Build the Flink job and submit it to the JobManager:
@@ -88,5 +105,3 @@ docker exec flink-jobmanager /opt/flink/bin/flink run \
 	-c trading.flink.TrendJob \
 	/opt/flink/flink-job.jar
 ```
-
-The job reads `ticks`, calculates one EMA-38/EMA-100 result per symbol and five-minute event-time window, and writes each result to TimescaleDB. The dashboard refreshes its latest-symbol table and chart every two seconds.
