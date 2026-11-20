@@ -265,7 +265,11 @@ function App() {
                 setSelectedSymbols([...hiddenSelected, ...selectedVisible]);
               }}
             >
-              {visibleSymbols.length === 0 && <option value="">No matching symbols</option>}
+              {visibleSymbols.length === 0 && (
+                <option value="" disabled>
+                  No matching symbols
+                </option>
+              )}
               {visibleSymbols.map((value) => (
                 <option key={value} value={value}>
                   {value}
