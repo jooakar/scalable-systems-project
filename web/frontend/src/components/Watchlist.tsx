@@ -18,10 +18,12 @@ interface Props {
   loading: boolean;
   onSelect: (symbol: string) => void;
   onRemove: (symbol: string) => void;
+  onAddTopActive?: () => void;
 }
 
-export function Watchlist({ quotes, selected, loading, onSelect, onRemove }: Props) {
+export function Watchlist({ quotes, selected, loading, onSelect, onRemove, onAddTopActive }: Props) {
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean } | null>(null);
+  const [filterActive, setFilterActive] = useState(false);
 
   const ordered = useMemo(() => {
     if (!sort) return quotes;
@@ -36,7 +38,12 @@ export function Watchlist({ quotes, selected, loading, onSelect, onRemove }: Pro
     });
   }, [quotes, sort]);
 
-  const spreadScale = Math.max(0, ...quotes.map((quote) => Math.abs(quote.spreadPct ?? 0)));
+  const displayed = useMemo(() => {
+    if (!filterActive) return ordered;
+    return ordered.filter((quote) => quote.series.length > 5);
+  }, [ordered, filterActive]);
+
+  const spreadScale = Math.max(0, ...displayed.map((quote) => Math.abs(quote.spreadPct ?? 0)));
 
   function header(key: SortKey, label: string, numeric = true) {
     const active = sort?.key === key;
@@ -60,11 +67,67 @@ export function Watchlist({ quotes, selected, loading, onSelect, onRemove }: Pro
     <Panel
       title="Watchlist"
       className="watchlist"
-      aside={<span className="muted">{quotes.length} symbols · change vs previous 5-min window</span>}
+      aside={
+        <div style={{ display: "inline-flex", alignItems: "center", gap: "10px" }}>
+          <div className="segmented" role="group" aria-label="Filter watchlist">
+            <button
+              type="button"
+              className={!filterActive ? "active" : ""}
+              onClick={() => setFilterActive(false)}
+            >
+              All ({quotes.length})
+            </button>
+            <button
+              type="button"
+              className={filterActive ? "active" : ""}
+              onClick={() => setFilterActive(true)}
+              title="Show only symbols with >5 windows of trades"
+            >
+              Active
+            </button>
+          </div>
+          {onAddTopActive && (
+            <button
+              type="button"
+              className="sort"
+              style={{ color: "var(--accent)", fontSize: "11px" }}
+              title="Add the 12 most active market symbols to your watchlist"
+              onClick={onAddTopActive}
+            >
+              + Top active
+            </button>
+          )}
+        </div>
+      }
     >
       {quotes.length === 0 ? (
         <Empty title={loading ? "Loading…" : "Your watchlist is empty"}>
-          {loading ? undefined : "Search for a symbol and press Watch to follow it here."}
+          {loading ? undefined : (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+              <span>Search for a symbol and press Watch to follow it here.</span>
+              {onAddTopActive && (
+                <button
+                  type="button"
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: "6px",
+                    background: "var(--panel-raised)",
+                    color: "var(--accent)",
+                    border: "1px solid var(--line)",
+                    marginTop: "4px",
+                    cursor: "pointer",
+                  }}
+                  onClick={onAddTopActive}
+                >
+                  ★ Load Top 12 Most Traded Symbols
+                </button>
+              )}
+            </div>
+          )}
+        </Empty>
+      ) : displayed.length === 0 ? (
+        <Empty title="No active symbols in watchlist">
+          All watched symbols have ≤5 windows. Switch filter to “All” or click “+ Top active”.
         </Empty>
       ) : (
         <div className="table-scroll">
@@ -88,7 +151,7 @@ export function Watchlist({ quotes, selected, loading, onSelect, onRemove }: Pro
               </tr>
             </thead>
             <tbody>
-              {ordered.map((quote) => {
+              {displayed.map((quote) => {
                 const { ticker, exchange } = splitSymbol(quote.symbol);
                 const precision = pricePrecision(quote.last);
                 return (

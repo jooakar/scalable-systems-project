@@ -30,12 +30,41 @@ public final class WebApp {
             LIMIT ?
             """;
 
-    private static final String SYMBOLS_QUERY = """
-            SELECT DISTINCT symbol
+    private static final String TOP_ACTIVE_QUERY = """
+            SELECT l.symbol, l.window_end, l.last_price, l.ema38, l.ema100, l.received_at
+            FROM latest_ema_results l
+            JOIN (
+                SELECT symbol, count(*) AS cnt
+                FROM ema_results
+                WHERE COALESCE(last_price, 0) <> 0
+                   OR COALESCE(ema38, 0) <> 0
+                   OR COALESCE(ema100, 0) <> 0
+                GROUP BY symbol
+                ORDER BY cnt DESC, symbol
+                LIMIT ?
+            ) top ON l.symbol = top.symbol
+            ORDER BY top.cnt DESC, l.symbol
+            """;
+
+    private static final String SYMBOLS_ACTIVE_QUERY = """
+            SELECT symbol
             FROM ema_results
             WHERE COALESCE(last_price, 0) <> 0
                OR COALESCE(ema38, 0) <> 0
                OR COALESCE(ema100, 0) <> 0
+            GROUP BY symbol
+            HAVING count(*) >= ?
+            ORDER BY count(*) DESC, symbol
+            """;
+
+    private static final String SYMBOLS_ALPHA_QUERY = """
+            SELECT symbol
+            FROM ema_results
+            WHERE COALESCE(last_price, 0) <> 0
+               OR COALESCE(ema38, 0) <> 0
+               OR COALESCE(ema100, 0) <> 0
+            GROUP BY symbol
+            HAVING count(*) >= ?
             ORDER BY symbol
             """;
 
@@ -267,14 +296,16 @@ public final class WebApp {
         return (List<Map<String, Object>>) entry.get("rows");
     }
 
-    // Returns latest EMA Results
+    // Returns latest EMA Results, optionally sorted by trade activity
     private void latest(io.javalin.http.Context context) {
         measure(context, () -> {
             int limit = limit(context.queryParam("limit"));
+            String sort = context.queryParam("sort");
+            String sql = "active".equalsIgnoreCase(sort) ? TOP_ACTIVE_QUERY : LATEST_QUERY;
             List<Map<String, Object>> rows = new ArrayList<>();
 
             try (Connection connection = connection();
-                 PreparedStatement statement = connection.prepareStatement(LATEST_QUERY)) {
+                 PreparedStatement statement = connection.prepareStatement(sql)) {
                 statement.setInt(1, limit);
 
                 try (ResultSet result = statement.executeQuery()) {
@@ -289,15 +320,23 @@ public final class WebApp {
     }
 
     // Returns the list of symbols that have usable EMA data.
+    // Query params: min_windows (default: 1), sort (default: active, or alpha/symbol).
     private void symbols(io.javalin.http.Context context) {
         measure(context, () -> {
+            int minWindows = bounded(context.queryParam("min_windows"), 1, 1, 10000, "min_windows");
+            String sort = context.queryParam("sort");
+            boolean sortByActive = !"symbol".equalsIgnoreCase(sort) && !"alpha".equalsIgnoreCase(sort);
+            String sql = sortByActive ? SYMBOLS_ACTIVE_QUERY : SYMBOLS_ALPHA_QUERY;
+
             List<String> symbols = new ArrayList<>();
 
             try (Connection connection = connection();
-                 PreparedStatement statement = connection.prepareStatement(SYMBOLS_QUERY);
-                 ResultSet result = statement.executeQuery()) {
-                while (result.next()) {
-                    symbols.add(result.getString(1));
+                 PreparedStatement statement = connection.prepareStatement(sql)) {
+                statement.setInt(1, minWindows);
+                try (ResultSet result = statement.executeQuery()) {
+                    while (result.next()) {
+                        symbols.add(result.getString(1));
+                    }
                 }
             }
 

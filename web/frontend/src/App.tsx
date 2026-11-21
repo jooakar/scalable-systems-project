@@ -27,14 +27,34 @@ export function App() {
   const summary = usePoll<Summary>("/api/summary", FAST_MS);
   const feed = usePoll<Signal[]>("/api/signals/latest?limit=80", FAST_MS);
 
-  // First visit: start the watchlist with the most recently updated symbols.
-  const starter = usePoll<TrendRow[]>(seeded ? null : "/api/trends/latest?limit=12", FAST_MS);
+  // First visit: start the watchlist with the most actively traded symbols.
+  const starter = usePoll<TrendRow[]>(seeded ? null : "/api/trends/latest?limit=12&sort=active", FAST_MS);
   useEffect(() => {
     if (!seeded && starter.data && starter.data.length > 0) {
       setWatchlist((current) => (current.length > 0 ? current : starter.data!.map((row) => row.symbol)));
       setSeeded(true);
     }
   }, [seeded, starter.data, setWatchlist, setSeeded]);
+
+  const loadTopActive = useCallback(async () => {
+    try {
+      const response = await fetch("/api/trends/latest?limit=12&sort=active");
+      if (response.ok) {
+        const data: TrendRow[] = await response.json();
+        const topSymbols = data.map((row) => row.symbol);
+        setWatchlist((current) => {
+          const merged = new Set([...current, ...topSymbols]);
+          return Array.from(merged);
+        });
+        setSeeded(true);
+        if (topSymbols.length > 0 && (selected == null || !watchlist.includes(selected))) {
+          setSelected(topSymbols[0]);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [setWatchlist, setSeeded, selected, watchlist, setSelected]);
 
   useEffect(() => {
     if (selected == null && watchlist.length > 0) {
@@ -131,6 +151,7 @@ export function App() {
           loading={watchlist.length > 0 ? watch.data === undefined : !seeded && !noData}
           onSelect={setSelected}
           onRemove={toggleWatch}
+          onAddTopActive={loadTopActive}
         />
       </main>
 

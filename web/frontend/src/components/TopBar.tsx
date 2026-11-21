@@ -106,6 +106,21 @@ export function TopBar({ symbols, watchlist, quotes, latestWindowEnd, connection
         <kbd aria-hidden="true">/</kbd>
         {open && (
           <ul id="symbol-results" className="results" role="listbox">
+            {!query.trim() && results.length > 0 && (
+              <li
+                className="results-empty muted"
+                style={{
+                  borderBottom: "1px solid var(--line-soft)",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontWeight: 600,
+                  letterSpacing: "0.06em",
+                  textTransform: "uppercase",
+                }}
+              >
+                Most Traded Symbols
+              </li>
+            )}
             {results.length === 0 && <li className="results-empty muted">No symbol matches “{query}”.</li>}
             {results.map((symbol, index) => {
               const { ticker, exchangeName } = splitSymbol(symbol);
