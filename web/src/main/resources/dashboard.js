@@ -135,6 +135,7 @@ function App() {
   const [selectedSymbols, setSelectedSymbols] = useState([]);
   const [latestBySymbol, setLatestBySymbol] = useState({});
   const [histories, setHistories] = useState({});
+  const [signalsBySymbol, setSignalsBySymbol] = useState({});
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -193,12 +194,16 @@ function App() {
       try {
         const results = await Promise.all(
           selectedSymbols.map(async (symbol) => {
-            const rows = await getJson(`/trends/${encodeURIComponent(symbol)}?limit=1000`);
-            return [symbol, rows.filter(hasActualValue)];
+            const [trendRows, signalRows] = await Promise.all([
+              getJson(`/trends/${encodeURIComponent(symbol)}?limit=1000`),
+              getJson(`/signals/${encodeURIComponent(symbol)}?limit=20`),
+            ]);
+            return [symbol, trendRows.filter(hasActualValue), signalRows];
           }),
         );
         if (!cancelled) {
-          const nextHistories = Object.fromEntries(results);
+          const nextHistories = Object.fromEntries(results.map(([s, h]) => [s, h]));
+          const nextSignals = Object.fromEntries(results.map(([s, _, sig]) => [s, sig]));
           const nextLatest = Object.fromEntries(results.map(([value, rows]) => [value, rows[rows.length - 1] || null]));
 
           // Keep existing references when values are unchanged so Chart.js
@@ -209,6 +214,7 @@ function App() {
           setLatestBySymbol((current) =>
             latestValuesEqual(current, nextLatest, selectedSymbols) ? current : nextLatest,
           );
+          setSignalsBySymbol(nextSignals);
           loaded = true;
         }
       } catch (requestError) {
@@ -289,9 +295,17 @@ function App() {
             <div className="cards">
               {selectedSymbols.map((value) => {
                 const latest = latestBySymbol[value];
+                const latestSignal = (signalsBySymbol[value] || [])[0];
                 return (
                   <div className="panel metric" key={value}>
-                    <h3>{value}</h3>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <h3>{value}</h3>
+                      {latestSignal && (
+                        <span className={`badge badge-${latestSignal.type.toLowerCase()}`}>
+                          {latestSignal.type}
+                        </span>
+                      )}
+                    </div>
                     <span>Price</span>
                     <strong>{formatNumber(latest?.lastPrice)}</strong>
                     <span>EMA 38: {formatNumber(latest?.ema38)}</span>
@@ -300,6 +314,37 @@ function App() {
                 );
               })}
             </div>
+          </section>
+
+          <section className="panel" style={{ marginBottom: "16px" }}>
+            <h2>Trading Signals (Query 2 Breakouts)</h2>
+            {selectedSymbols.some((s) => (signalsBySymbol[s] || []).length > 0) ? (
+              <div className="signals-list">
+                {selectedSymbols
+                  .flatMap((s) => (signalsBySymbol[s] || []).map((sig) => ({ ...sig, symbol: s })))
+                  .sort((a, b) => (b.windowEnd || "").localeCompare(a.windowEnd || ""))
+                  .slice(0, 15)
+                  .map((sig, idx) => (
+                    <div className="signal-item" key={`${sig.symbol}-${sig.windowEnd}-${idx}`}>
+                      <div>
+                        <strong>{sig.symbol}</strong>
+                        <span className="muted" style={{ marginLeft: "8px" }}>
+                          Window: {formatTime(sig.windowEnd)}
+                        </span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <span>EMA 38: {formatNumber(sig.ema38)}</span>
+                        <span>EMA 100: {formatNumber(sig.ema100)}</span>
+                        <span className={`badge badge-${sig.type.toLowerCase()}`}>
+                          {sig.type}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            ) : (
+              <p className="muted">No crossover breakout signals detected yet for selected stocks.</p>
+            )}
           </section>
 
           <section className="panel">

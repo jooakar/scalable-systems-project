@@ -88,10 +88,11 @@ public class ProducerApp {
     /** Picks the needed columns from a CSV line, see Table 1 of the project spec for the column order. */
     static TickEvent parse(String line) {
         String[] f = line.split(",", -1);
-        return new TickEvent(f[0], f[1], f[2], f[3],
-                f[21].isEmpty() ? null : Double.valueOf(f[21]),
-                f[23].isEmpty() ? null : f[23],
-                f[26].isEmpty() ? null : f[26]);
+        return new TickEvent(f[0], f[1], f[2],
+                f[3].isBlank() ? null : f[3],
+                f[21].isBlank() ? null : Double.valueOf(f[21]),
+                f[23].isBlank() ? null : f[23],
+                f[26].isBlank() ? null : f[26]);
     }
 
     /** Directories are expanded to their CSV files, sorted by name so the days are sent in order. */
