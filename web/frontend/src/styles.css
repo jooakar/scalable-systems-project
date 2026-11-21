@@ -938,6 +938,30 @@ button {
   grid-column: 2 / -1;
   font-size: 11px;
 }
+.feed-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  font-size: 11px;
+}
+.feed-pagination button {
+  padding: 3px 9px;
+  border-radius: 4px;
+  background: var(--panel-raised);
+  color: var(--text);
+  border: 1px solid var(--line);
+  font: 500 11px var(--mono);
+}
+.feed-pagination button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.feed-pagination button:not(:disabled):hover {
+  background: var(--line);
+  color: var(--accent);
+}
 
 /* Status bar */
 .statusbar {

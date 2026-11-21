@@ -25,7 +25,6 @@ export function App() {
 
   const symbols = usePoll<string[]>("/api/symbols", SLOW_MS);
   const summary = usePoll<Summary>("/api/summary", FAST_MS);
-  const feed = usePoll<Signal[]>("/api/signals/latest?limit=80", FAST_MS);
 
   // First visit: start the watchlist with the most actively traded symbols.
   const starter = usePoll<TrendRow[]>(seeded ? null : "/api/trends/latest?limit=12&sort=active", FAST_MS);
@@ -139,10 +138,8 @@ export function App() {
           onRange={setRangeHours}
         />
         <SignalFeed
-          signals={feed.data ?? EMPTY_SIGNALS}
           summary={summary.data}
           selected={selected}
-          loading={feed.data === undefined}
           onSelect={setSelected}
         />
         <Watchlist

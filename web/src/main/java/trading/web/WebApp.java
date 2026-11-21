@@ -384,15 +384,39 @@ public final class WebApp {
         });
     }
 
-    // Returns latest BUY/SELL crossover events.
+    // Returns BUY/SELL crossover events with pagination and filtering.
     private void latestSignals(io.javalin.http.Context context) {
         measure(context, () -> {
-            int limit = limit(context.queryParam("limit"));
+            int limit = bounded(context.queryParam("limit"), 50, 1, 1000, "limit");
+            int offset = bounded(context.queryParam("offset"), 0, 0, 1_000_000, "offset");
+            String rawType = context.queryParam("type");
+            String type = ("BUY".equalsIgnoreCase(rawType) || "SELL".equalsIgnoreCase(rawType))
+                    ? rawType.toUpperCase() : null;
+            String rawSymbol = context.queryParam("symbol");
+            String symbol = (rawSymbol != null && !rawSymbol.isBlank()) ? rawSymbol.trim() : null;
+
+            StringBuilder sql = new StringBuilder(
+                    "SELECT symbol, window_end, signal_type, ema38, ema100, received_at FROM crossover_events WHERE 1=1");
+            List<Object> params = new ArrayList<>();
+            if (type != null) {
+                sql.append(" AND signal_type = ?");
+                params.add(type);
+            }
+            if (symbol != null) {
+                sql.append(" AND symbol = ?");
+                params.add(symbol);
+            }
+            sql.append(" ORDER BY window_end DESC, symbol LIMIT ? OFFSET ?");
+            params.add(limit);
+            params.add(offset);
+
             List<Map<String, Object>> rows = new ArrayList<>();
 
             try (Connection connection = connection();
-                 PreparedStatement statement = connection.prepareStatement(LATEST_SIGNALS_QUERY)) {
-                statement.setInt(1, limit);
+                 PreparedStatement statement = connection.prepareStatement(sql.toString())) {
+                for (int i = 0; i < params.size(); i++) {
+                    statement.setObject(i + 1, params.get(i));
+                }
 
                 try (ResultSet result = statement.executeQuery()) {
                     while (result.next()) {
