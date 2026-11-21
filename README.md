@@ -10,7 +10,7 @@ Maven multi-module project. JVM parts run on the host, infrastructure runs in Do
 | ----------- | ------------------------------------------------------- |
 | `common`    | Shared `TickEvent` schema and JSON serde                |
 | `producer`  | Replays the Trading Data CSVs into Kafka topic `ticks`  |
-| `flink-job` | Query 1 (EMA) and Query 2 (crossovers), not implemented |
+| `flink-job` | Query 1 (EMA) and Query 2 (crossovers)                  |
 | `web`       | Backend serving TimescaleDB API and live EMA dashboard  |
 
 ## Prerequisites
