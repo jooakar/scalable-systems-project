@@ -56,6 +56,11 @@ services:
     volumes:
       - timescaledb-data:/var/lib/postgresql
       - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading -d trading"]
+      interval: 2s
+      timeout: 5s
+      retries: 15
     restart: always
 
   web:
@@ -64,7 +69,8 @@ services:
       dockerfile: Dockerfile.web
     container_name: trading-web
     depends_on:
-      - timescaledb
+      timescaledb:
+        condition: service_healthy
     ports:
       - "7070:7070"
     environment:
@@ -73,6 +79,24 @@ services:
       DB_PASSWORD: trading
       WEB_PORT: 7070
     restart: always
+
+  flink-job-submitter:
+    build:
+      context: .
+      dockerfile: Dockerfile.flink-job
+    container_name: flink-job-submitter
+    depends_on:
+      jobmanager:
+        condition: service_started
+      taskmanager:
+        condition: service_started
+      kafka:
+        condition: service_started
+      timescaledb:
+        condition: service_healthy
+    environment:
+      JOBMANAGER_URL: http://jobmanager:8081
+    restart: "no"
 
   prometheus:
     image: prom/prometheus:v3.8.0
