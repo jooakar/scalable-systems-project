@@ -16,7 +16,6 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 
 /**
  * Flink streaming job: Kafka → filter price events → 5-min tumbling windows
@@ -40,6 +39,9 @@ public final class TrendJob {
         StreamExecutionEnvironment env =
                 StreamExecutionEnvironment.getExecutionEnvironment();
 
+        // Checkpoint state periodically so EMA and crossover state survive failures
+        env.enableCheckpointing(60_000);
+
         // ── Kafka Source ──────────────────────────────────────────────────────
         KafkaSource<TickEvent> source = KafkaSource.<TickEvent>builder()
                 .setBootstrapServers(bootstrapServers)
@@ -55,12 +57,15 @@ public final class TrendJob {
         WatermarkStrategy<TickEvent> watermarks = WatermarkStrategy
                 .<TickEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
                 .withTimestampAssigner((event, recordTimestamp) -> {
-                  try {
-                    return extractEpochMillis(event);
-                  } catch (DateTimeParseException exception) {
-                    return recordTimestamp >= 0 ? recordTimestamp : 0L;
+                    try {
+                        return extractEpochMillis(event);
+                    } catch (Exception exception) {
+                        // Never fall back to Kafka recordTimestamp because it reflects wall-clock time
+                        // (e.g. 2026), which would advance the watermark years ahead and cause all
+                        // subsequent historical events (2021) to be discarded as late data.
+                        return 0L;
                     }
-                  })
+                })
                 .withIdleness(Duration.ofMinutes(1));
 
         DataStream<TickEvent> ticks = env.fromSource(
@@ -81,7 +86,7 @@ public final class TrendJob {
                 .keyBy(EmaResult::symbol)
                 .process(new CrossoverDetector());
 
-        crossovers.print("CROSSOVER");
+        crossovers.sinkTo(new CrossoverJdbcSink()).name("timescaledb-crossover-events");
 
         env.execute("Trading Trend Detection");
     }
@@ -93,12 +98,12 @@ public final class TrendJob {
      * Time format: {@code HH:mm:ss[.ssss]} parsed via standard ISO local time.</p>
      */
     static long extractEpochMillis(TickEvent event) {
-        String dateStr = event.tradingDate() != null
+        String dateStr = event.tradingDate() != null && !event.tradingDate().isBlank()
                 ? event.tradingDate() : event.date();
-        String timeStr = event.tradingTime() != null
+        String timeStr = event.tradingTime() != null && !event.tradingTime().isBlank()
                 ? event.tradingTime() : event.time();
         LocalDate date = LocalDate.parse(dateStr, DATE_FMT);
-        LocalTime time = timeStr != null ? LocalTime.parse(timeStr) : LocalTime.MIN;
+        LocalTime time = timeStr != null && !timeStr.isBlank() ? LocalTime.parse(timeStr) : LocalTime.MIN;
         ZonedDateTime zdt = ZonedDateTime.of(date, time, ZONE);
         return zdt.toInstant().toEpochMilli();
     }

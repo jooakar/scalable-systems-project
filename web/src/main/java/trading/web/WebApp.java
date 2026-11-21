@@ -53,6 +53,23 @@ public final class WebApp {
             WHERE symbol = ?
             """;
 
+    private static final String LATEST_SIGNALS_QUERY = """
+            SELECT symbol, window_end, signal_type, ema38, ema100, received_at
+            FROM crossover_events
+            ORDER BY window_end DESC
+            LIMIT ?
+            """;
+
+    private static final String SIGNALS_FOR_SYMBOL_QUERY = """
+            SELECT symbol, window_end, signal_type, ema38, ema100, received_at
+            FROM crossover_events
+            WHERE symbol = ?
+              AND window_end >= ?
+              AND window_end <= ?
+            ORDER BY window_end
+            LIMIT ?
+            """;
+
     // load dashboard files
     private static final String DASHBOARD_HTML = loadResource("/dashboard.html");
     private static final String DASHBOARD_CSS = loadResource("/dashboard.css");
@@ -86,6 +103,8 @@ public final class WebApp {
             config.routes.get("/api/symbols", web::symbols);
             config.routes.get("/api/trends/latest", web::latest);
             config.routes.get("/api/trends/{symbol}", web::history);
+            config.routes.get("/api/signals/latest", web::latestSignals);
+            config.routes.get("/api/signals/{symbol}", web::signalsHistory);
             config.routes.get("/metrics", web::metrics);
         });
 
@@ -191,6 +210,66 @@ public final class WebApp {
             context.json(rows);
         });
     }
+
+    // Returns latest BUY/SELL crossover events.
+    private void latestSignals(io.javalin.http.Context context) {
+        measure(context, () -> {
+            int limit = limit(context.queryParam("limit"));
+            List<Map<String, Object>> rows = new ArrayList<>();
+
+            try (Connection connection = connection();
+                 PreparedStatement statement = connection.prepareStatement(LATEST_SIGNALS_QUERY)) {
+                statement.setInt(1, limit);
+
+                try (ResultSet result = statement.executeQuery()) {
+                    while (result.next()) {
+                        rows.add(signalRow(result));
+                    }
+                }
+            }
+
+            context.json(rows);
+        });
+    }
+
+    // Returns crossover signals for one symbol and time range.
+    private void signalsHistory(io.javalin.http.Context context) {
+        measure(context, () -> {
+            String symbol = context.pathParam("symbol");
+            OffsetDateTime requestedTo = parseTime(context.queryParam("to"), null);
+            OffsetDateTime requestedFrom = parseTime(context.queryParam("from"), null);
+            int limit = limit(context.queryParam("limit"));
+
+            List<Map<String, Object>> rows = new ArrayList<>();
+
+            try (Connection connection = connection();
+                 PreparedStatement statement = connection.prepareStatement(SIGNALS_FOR_SYMBOL_QUERY)) {
+                OffsetDateTime to = requestedTo == null
+                        ? latestWindowEnd(connection, symbol)
+                        : requestedTo;
+                if (to == null) {
+                    to = OffsetDateTime.now();
+                }
+                OffsetDateTime from = requestedFrom == null
+                        ? to.minus(Duration.ofHours(24))
+                        : requestedFrom;
+
+                statement.setString(1, symbol);
+                statement.setObject(2, from);
+                statement.setObject(3, to);
+                statement.setInt(4, limit);
+
+                try (ResultSet result = statement.executeQuery()) {
+                    while (result.next()) {
+                        rows.add(signalRow(result));
+                    }
+                }
+            }
+
+            context.json(rows);
+        });
+    }
+
     // Finds the newest stored window for a symbol.
 
     private OffsetDateTime latestWindowEnd(Connection connection, String symbol) throws Exception {
@@ -260,6 +339,17 @@ public final class WebApp {
         row.put("symbol", result.getString("symbol"));
         row.put("windowEnd", timestamp(result, "window_end"));
         row.put("lastPrice", nullableDouble(result, "last_price"));
+        row.put("ema38", nullableDouble(result, "ema38"));
+        row.put("ema100", nullableDouble(result, "ema100"));
+        row.put("receivedAt", timestamp(result, "received_at"));
+        return row;
+    }
+
+    private static Map<String, Object> signalRow(ResultSet result) throws Exception {
+        Map<String, Object> row = new LinkedHashMap<>();
+        row.put("symbol", result.getString("symbol"));
+        row.put("windowEnd", timestamp(result, "window_end"));
+        row.put("type", result.getString("signal_type"));
         row.put("ema38", nullableDouble(result, "ema38"));
         row.put("ema100", nullableDouble(result, "ema100"));
         row.put("receivedAt", timestamp(result, "received_at"));
