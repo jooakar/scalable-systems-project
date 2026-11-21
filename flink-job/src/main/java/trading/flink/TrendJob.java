@@ -16,6 +16,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 
 /**
  * Flink streaming job: Kafka → filter price events → 5-min tumbling windows
@@ -51,29 +52,21 @@ public final class TrendJob {
                 .setValueOnlyDeserializer(new TickEventDeserializer())
                 .build();
 
-        // Event-time processing: timestamps are extracted from the data itself.
+        // Event-time processing: timestamps are extracted from price events only.
         // We allow up to 5 seconds of out-of-orderness to handle late arrivals,
-        // and mark partitions idle if no events arrive for 1 minute so the watermark keeps progressing.
+        // and mark partitions idle if no events arrive for 1 minute.
         WatermarkStrategy<TickEvent> watermarks = WatermarkStrategy
                 .<TickEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-                .withTimestampAssigner((event, recordTimestamp) -> {
-                    try {
-                        return extractEpochMillis(event);
-                    } catch (Exception exception) {
-                        // Never fall back to Kafka recordTimestamp because it reflects wall-clock time
-                        // (e.g. 2026), which would advance the watermark years ahead and cause all
-                        // subsequent historical events (2021) to be discarded as late data.
-                        return 0L;
-                    }
-                })
+                .withTimestampAssigner((event, recordTimestamp) -> extractEpochMillis(event))
                 .withIdleness(Duration.ofMinutes(1));
 
-        DataStream<TickEvent> ticks = env.fromSource(
-                source, watermarks, "kafka-ticks");
-
-        // ── Query 1: EMA computation ──────────────────────────────────────────
-        DataStream<EmaResult> emas = ticks
-                .filter(e -> e.last() != null)           // only price events
+        // ── Ingest and Filter ─────────────────────────────────────────────────
+        // Drop any non-price events and any events without a valid timestamp immediately,
+        // so watermarks and windows are only computed over legitimate price observations.
+        DataStream<EmaResult> emas = env.fromSource(
+                        source, WatermarkStrategy.noWatermarks(), "kafka-ticks")
+                .filter(TrendJob::isUsablePriceEvent)
+                .assignTimestampsAndWatermarks(watermarks)
                 .keyBy(TickEvent::id)                    // group by symbol
                 .window(TumblingEventTimeWindows.of(
                         Duration.ofMinutes(5)))          // 5-minute tumbling windows
@@ -91,6 +84,27 @@ public final class TrendJob {
         env.execute("Trading Trend Detection");
     }
 
+    /** Returns true only for price events that have valid, parseable timestamps. */
+    static boolean isUsablePriceEvent(TickEvent event) {
+        if (event == null || event.last() == null) {
+            return false;
+        }
+        String dateStr = event.tradingDate() != null && !event.tradingDate().isBlank()
+                ? event.tradingDate() : event.date();
+        String timeStr = event.tradingTime() != null && !event.tradingTime().isBlank()
+                ? event.tradingTime() : event.time();
+        if (dateStr == null || dateStr.isBlank() || timeStr == null || timeStr.isBlank()) {
+            return false;
+        }
+        try {
+            LocalDate.parse(dateStr, DATE_FMT);
+            LocalTime.parse(timeStr);
+            return true;
+        } catch (DateTimeParseException exception) {
+            return false;
+        }
+    }
+
     /**
      * Extracts epoch milliseconds from a TickEvent's date and time fields.
      *
@@ -103,7 +117,7 @@ public final class TrendJob {
         String timeStr = event.tradingTime() != null && !event.tradingTime().isBlank()
                 ? event.tradingTime() : event.time();
         LocalDate date = LocalDate.parse(dateStr, DATE_FMT);
-        LocalTime time = timeStr != null && !timeStr.isBlank() ? LocalTime.parse(timeStr) : LocalTime.MIN;
+        LocalTime time = LocalTime.parse(timeStr);
         ZonedDateTime zdt = ZonedDateTime.of(date, time, ZONE);
         return zdt.toInstant().toEpochMilli();
     }

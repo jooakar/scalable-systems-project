@@ -1,0 +1,9 @@
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /workspace
+COPY . .
+RUN mvn -pl flink-job -am package -DskipTests
+
+FROM curlimages/curl:8.13.0
+COPY --from=build /workspace/flink-job/target/flink-job.jar /app/flink-job.jar
+COPY scripts/submit-flink-job.sh /app/submit-flink-job.sh
+ENTRYPOINT ["sh", "/app/submit-flink-job.sh"]

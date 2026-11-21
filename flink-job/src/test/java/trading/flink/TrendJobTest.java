@@ -7,8 +7,25 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TrendJobTest {
+
+    @Test
+    void rejectsEventsWithoutPriceOrTimestamps() {
+        // Housekeeping event: no price, no time
+        TickEvent housekeeping = new TickEvent("ADP.FR", "E", "08-11-2021", null, null, null, null);
+        assertFalse(TrendJob.isUsablePriceEvent(housekeeping));
+
+        // Price event without any timestamp
+        TickEvent priceWithoutTime = new TickEvent("ADP.FR", "E", "08-11-2021", "", 10.5, "", null);
+        assertFalse(TrendJob.isUsablePriceEvent(priceWithoutTime));
+
+        // Valid price event
+        TickEvent validPrice = new TickEvent("RDSA.NL", "E", "08-11-2021", "09:00:00.000", 42.0, "09:00:00.123", null);
+        assertTrue(TrendJob.isUsablePriceEvent(validPrice));
+    }
 
     @Test
     void extractsEpochMillisFromDateAndTradingTime() {
