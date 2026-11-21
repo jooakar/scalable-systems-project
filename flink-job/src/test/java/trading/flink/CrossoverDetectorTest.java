@@ -30,28 +30,38 @@ class CrossoverDetectorTest {
      */
     private static List<CrossoverEvent> detect(
             String symbol,
-            double prev38, double prev100,
+            Double prev38, Double prev100,
             double curr38, double curr100) {
 
         List<CrossoverEvent> out = new ArrayList<>();
         String windowEnd = "2021-11-08T09:05:00+01:00";
 
-        boolean prevBelowOrEqual = prev38 <= prev100;
-        boolean currAbove = curr38 > curr100;
+        if (prev38 != null && prev100 != null && prev38 > 0.0 && prev100 > 0.0
+                && curr38 > 0.0 && curr100 > 0.0) {
+            boolean prevBelowOrEqual = prev38 <= prev100;
+            boolean currAbove = curr38 > curr100;
 
-        boolean prevAboveOrEqual = prev38 >= prev100;
-        boolean currBelow = curr38 < curr100;
+            boolean prevAboveOrEqual = prev38 >= prev100;
+            boolean currBelow = curr38 < curr100;
 
-        EmaResult ema = new EmaResult(symbol, windowEnd, 0.0, curr38, curr100);
+            EmaResult ema = new EmaResult(symbol, windowEnd, 0.0, curr38, curr100);
 
-        if (prevBelowOrEqual && currAbove) {
-            out.add(new CrossoverEvent(ema.symbol(), ema.windowEnd(),
-                    CrossoverEvent.BUY, curr38, curr100));
-        } else if (prevAboveOrEqual && currBelow) {
-            out.add(new CrossoverEvent(ema.symbol(), ema.windowEnd(),
-                    CrossoverEvent.SELL, curr38, curr100));
+            if (prevBelowOrEqual && currAbove) {
+                out.add(new CrossoverEvent(ema.symbol(), ema.windowEnd(),
+                        CrossoverEvent.BUY, curr38, curr100));
+            } else if (prevAboveOrEqual && currBelow) {
+                out.add(new CrossoverEvent(ema.symbol(), ema.windowEnd(),
+                        CrossoverEvent.SELL, curr38, curr100));
+            }
         }
         return out;
+    }
+
+    @Test
+    void noEventWhenPreviousEmasAreZeroOrNull() {
+        // Uninitialized state or zero state should not trigger false BUY signals
+        assertTrue(detect("723813.ETR", 0.0, 0.0, 13.02, 5.03).isEmpty());
+        assertTrue(detect("723813.ETR", null, null, 13.02, 5.03).isEmpty());
     }
 
     @Test

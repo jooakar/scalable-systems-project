@@ -22,6 +22,13 @@ class TrendJobTest {
         TickEvent priceWithoutTime = new TickEvent("ADP.FR", "E", "08-11-2021", "", 10.5, "", null);
         assertFalse(TrendJob.isUsablePriceEvent(priceWithoutTime));
 
+        // Midnight housekeeping / non-positive price events
+        TickEvent zeroPrice = new TickEvent("723813.ETR", "I", "08-11-2021", "00:00:00.000", 0.0, "00:00:00.000", null);
+        assertFalse(TrendJob.isUsablePriceEvent(zeroPrice));
+
+        TickEvent negativePrice = new TickEvent("723813.ETR", "I", "08-11-2021", "00:00:00.000", -5.0, "00:00:00.000", null);
+        assertFalse(TrendJob.isUsablePriceEvent(negativePrice));
+
         // Valid price event
         TickEvent validPrice = new TickEvent("RDSA.NL", "E", "08-11-2021", "09:00:00.000", 42.0, "09:00:00.123", null);
         assertTrue(TrendJob.isUsablePriceEvent(validPrice));

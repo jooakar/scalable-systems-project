@@ -16,8 +16,8 @@ export interface Quote {
   lastSignal: Signal | null;
 }
 
-export function trendOf(ema38: number | null, ema100: number | null): Quote["trend"] {
-  if (ema38 == null || ema100 == null) return null;
+export function trendOf(ema38: number | null, ema100: number | null, windowCount?: number): Quote["trend"] {
+  if (ema38 == null || ema100 == null || (windowCount !== undefined && windowCount < 2)) return null;
   if (ema38 > ema100) return "bullish";
   if (ema38 < ema100) return "bearish";
   return "neutral";
@@ -43,7 +43,7 @@ export function toQuote(entry: WatchEntry): Quote {
     ema100,
     spread,
     spreadPct: spread != null && ema100 ? (spread / ema100) * 100 : null,
-    trend: trendOf(ema38, ema100),
+    trend: trendOf(ema38, ema100, rows.length),
     series: rows.map((row) => row.lastPrice as number),
     lastSignal: entry.lastSignal,
   };
@@ -90,7 +90,7 @@ export function rangeStats(rows: TrendRow[], signals: Signal[]): RangeStats {
     windows: rows.length,
     spread,
     spreadPct: spread != null && ema100 ? (spread / ema100) * 100 : null,
-    trend: trendOf(ema38, ema100),
+    trend: trendOf(ema38, ema100, rows.length),
     warmup: last && ema100 != null ? ema100 / last : null,
     buys: signals.filter((signal) => signal.type === "BUY").length,
     sells: signals.filter((signal) => signal.type === "SELL").length,
