@@ -55,7 +55,53 @@ services:
       POSTGRES_DB: trading
     volumes:
       - timescaledb-data:/var/lib/postgresql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    restart: always
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    container_name: trading-web
+    depends_on:
+      - timescaledb
+    ports:
+      - "7070:7070"
+    environment:
+      DB_URL: jdbc:postgresql://timescaledb:5432/trading
+      DB_USER: trading
+      DB_PASSWORD: trading
+      WEB_PORT: 7070
+    restart: always
+
+  prometheus:
+    image: prom/prometheus:v3.8.0
+    container_name: prometheus
+    depends_on:
+      - web
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    restart: always
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    container_name: grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
     restart: always
 
 volumes:
   timescaledb-data:
+  grafana-data:

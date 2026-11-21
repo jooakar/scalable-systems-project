@@ -20,7 +20,7 @@ import java.time.format.DateTimeParseException;
 
 /**
  * Flink streaming job: Kafka → filter price events → 5-min tumbling windows
- * → EMA-38 and EMA-100 per symbol (Query 1) → crossover detection (Query 2).
+ * → EMA-38 and EMA-100 per symbol (Query 1) → TimescaleDB & crossover detection (Query 2).
  *
  * <p>Environment variables:
  * <ul>
@@ -74,7 +74,7 @@ public final class TrendJob {
                         Duration.ofMinutes(5)))          // 5-minute tumbling windows
                 .process(new EmaWindowFunction());
 
-        emas.print("EMA");
+        emas.sinkTo(new EmaJdbcSink()).name("timescaledb-ema-results");
 
         // ── Query 2: Crossover detection (buy/sell advisories) ────────────────
         DataStream<CrossoverEvent> crossovers = emas
