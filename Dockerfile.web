@@ -1,7 +1,15 @@
+FROM node:24-alpine AS frontend
+WORKDIR /workspace/web/frontend
+COPY web/frontend/package.json web/frontend/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY web/frontend/ ./
+RUN npm run build
+
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /workspace
 COPY . .
-RUN mvn --no-transfer-progress -pl web -am package -DskipTests
+COPY --from=frontend /workspace/web/target/classes/static web/target/classes/static
+RUN mvn --no-transfer-progress -pl web -am package -DskipTests -Dskip.frontend
 
 FROM eclipse-temurin:21-jre
 COPY --from=build /workspace/web/target/web.jar /app/web.jar

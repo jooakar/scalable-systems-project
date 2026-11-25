@@ -84,9 +84,9 @@ public final class TrendJob {
         env.execute("Trading Trend Detection");
     }
 
-    /** Returns true only for price events that have valid, parseable timestamps. */
+    /** Returns true only for price events that have valid, parseable timestamps and a positive price. */
     static boolean isUsablePriceEvent(TickEvent event) {
-        if (event == null || event.last() == null) {
+        if (event == null || event.last() == null || event.last() <= 0.0) {
             return false;
         }
         String dateStr = event.tradingDate() != null && !event.tradingDate().isBlank()

@@ -11,7 +11,7 @@
     {
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
-          packages = [ pkgs.jdk21 (pkgs.maven.override { jdk_headless = pkgs.jdk21; }) ];
+          packages = [ pkgs.jdk21 (pkgs.maven.override { jdk_headless = pkgs.jdk21; }) pkgs.nodejs ];
         };
       });
     };

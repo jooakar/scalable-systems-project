@@ -11,7 +11,7 @@ Maven multi-module project. JVM parts run on the host, infrastructure runs in Do
 | `common`    | Shared `TickEvent` schema and JSON serde                |
 | `producer`  | Replays the Trading Data CSVs into Kafka topic `ticks`  |
 | `flink-job` | Query 1 (EMA) and Query 2 (crossovers)                  |
-| `web`       | Backend serving TimescaleDB API and live EMA dashboard  |
+| `web`       | TimescaleDB API and the trading terminal frontend       |
 
 ## Prerequisites
 
@@ -19,6 +19,8 @@ Maven multi-module project. JVM parts run on the host, infrastructure runs in Do
 - Docker Compose
 - JDK 21+ (or `nix develop` / direnv, which provides it)
 - Maven 3.9+
+- Node.js 22+ and npm, to build the web frontend (not needed for `docker compose`,
+  or pass `-Dskip.frontend` to Maven)
 
 ## Build
 
@@ -77,22 +79,48 @@ Arguments are CSV files or directories (a directory's files are replayed in name
 | `PARTITIONS`        | `4`              | Partitions when creating topic    |
 | `RATE`              | `0`              | Max events/s, `0` = unlimited     |
 
-## Web Dashboard
+## Web Terminal
+
+The terminal at [http://localhost:7070](http://localhost:7070) shows, for the
+selected symbol, the price with EMA 38 and EMA 100, BUY/SELL markers at each
+crossover and the EMA spread below the chart. Around it are a watchlist (stored
+in the browser), a live feed of the latest advisories across all symbols, and a
+symbol search (press `/`). Times are shown in exchange-local time.
+
+The frontend lives in `web/frontend` (Vite, React, TypeScript, and TradingView
+Lightweight Charts). `mvn package` runs `npm ci` and `npm run build`, which
+writes the bundle into the web jar, so the Java server serves everything.
+
+For frontend work, run the API (for example with `docker compose up -d
+timescaledb web`) and start the dev server with hot reload:
+
+```bash
+cd web/frontend
+npm install
+npm run dev        # http://localhost:5173, proxies /api to localhost:7070
+```
+
+To work on the UI without replaying the data set, load synthetic results into
+an empty development database. The script refuses to run if `ema_results` or
+`crossover_events` already has rows; adding `--force` replaces their contents:
+
+```bash
+node web/frontend/scripts/seed-demo.mjs | docker exec -i timescaledb psql -q -U trading -d trading
+```
 
 The web API endpoints are:
 
-| Endpoint               | Purpose                                     |
-| ---------------------- | ------------------------------------------- |
-| `/api/symbols`         | Lists symbols with stored EMA or price data |
-| `/api/trends/latest`   | Returns the latest result rows              |
-| `/api/trends/{symbol}` | Returns historical rows for one symbol      |
-| `/health`              | Checks database connectivity                |
-| `/metrics`             | Exposes Prometheus metrics                  |
-
-Compose starts Kafka, Flink, TimescaleDB, and the web service, but it does not
-automatically submit the Flink job or replay CSV data. The web dashboard can
-start without EMA data, but the Flink job must be submitted to populate
-TimescaleDB.
+| Endpoint                       | Purpose                                                      |
+| ------------------------------ | ------------------------------------------------------------ |
+| `/api/symbols`                 | Lists symbols with stored EMA or price data                  |
+| `/api/summary`                 | Newest window end and total BUY/SELL counts                  |
+| `/api/watchlist?symbols=A,B`   | Latest rows, recent prices and last signal for given symbols |
+| `/api/trends/latest`           | Returns the latest result rows                               |
+| `/api/trends/{symbol}?hours=N` | Returns historical rows for one symbol                       |
+| `/api/signals/latest`          | Returns the latest crossover advisories                      |
+| `/api/signals/{symbol}?hours=N`| Returns crossover advisories for one symbol                  |
+| `/health`                      | Checks database connectivity                                 |
+| `/metrics`                     | Exposes Prometheus metrics                                   |
 
 ## Run the Flink Job
 

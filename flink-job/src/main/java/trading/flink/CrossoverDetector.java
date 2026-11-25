@@ -24,7 +24,7 @@ import trading.common.EmaResult;
  * </ul>
  *
  * <p>No event is emitted for the very first window of a symbol (no previous
- * state to compare against).
+ * state to compare against) or when previous EMAs are zero (uninitialized state).
  */
 public class CrossoverDetector extends KeyedProcessFunction<String, EmaResult, CrossoverEvent> {
 
@@ -46,7 +46,8 @@ public class CrossoverDetector extends KeyedProcessFunction<String, EmaResult, C
         Double prev38 = prevEma38.value();
         Double prev100 = prevEma100.value();
 
-        if (prev38 != null && prev100 != null) {
+        if (prev38 != null && prev100 != null && prev38 > 0.0 && prev100 > 0.0
+                && ema.ema38() > 0.0 && ema.ema100() > 0.0) {
             boolean prevBelowOrEqual = prev38 <= prev100;
             boolean currAbove = ema.ema38() > ema.ema100();
 
