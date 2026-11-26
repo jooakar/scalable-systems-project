@@ -3,6 +3,7 @@ package trading.flink;
 import org.apache.flink.api.connector.sink2.Sink;
 import org.apache.flink.api.connector.sink2.SinkWriter;
 import org.apache.flink.api.connector.sink2.WriterInitContext;
+import org.apache.flink.api.common.eventtime.Watermark;
 import trading.common.EmaResult;
 
 import java.io.IOException;
@@ -12,7 +13,11 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.time.OffsetDateTime;
 
-/** Writes windowed EMA results to the TimescaleDB hypertable. */
+/**
+ * Writes windowed EMA results to the TimescaleDB hypertable in batched transactions.
+ * A batch is committed when it is full, when a watermark passes (right after windows fire,
+ * so live results stay current) and on checkpoints (so no acknowledged result is lost).
+ */
 public final class EmaJdbcSink implements Sink<EmaResult> {
 
     @Override
@@ -32,8 +37,11 @@ public final class EmaJdbcSink implements Sink<EmaResult> {
                     ema100 = EXCLUDED.ema100
                 """;
 
+        private static final int MAX_BATCH = 1000;
+
         private final Connection connection;
         private final PreparedStatement statement;
+        private int pending;
 
         private EmaJdbcWriter() throws IOException {
             try {
@@ -41,7 +49,7 @@ public final class EmaJdbcSink implements Sink<EmaResult> {
                         env("DB_URL", "jdbc:postgresql://timescaledb:5432/trading"),
                         env("DB_USER", "trading"),
                         env("DB_PASSWORD", "trading"));
-                connection.setAutoCommit(true);
+                connection.setAutoCommit(false);
                 statement = connection.prepareStatement(INSERT);
             } catch (SQLException exception) {
                 throw new IOException("Could not connect to TimescaleDB", exception);
@@ -56,15 +64,36 @@ public final class EmaJdbcSink implements Sink<EmaResult> {
                 statement.setDouble(3, result.lastPrice());
                 statement.setDouble(4, result.ema38());
                 statement.setDouble(5, result.ema100());
-                statement.executeUpdate();
+                statement.addBatch();
             } catch (SQLException exception) {
                 throw new IOException("Could not write EMA result", exception);
+            }
+            if (++pending >= MAX_BATCH) {
+                commit();
             }
         }
 
         @Override
-        public void flush(boolean endOfInput) {
-            // Auto-commit makes every result durable immediately for live queries.
+        public void writeWatermark(Watermark watermark) throws IOException {
+            commit();
+        }
+
+        @Override
+        public void flush(boolean endOfInput) throws IOException {
+            commit();
+        }
+
+        private void commit() throws IOException {
+            if (pending == 0) {
+                return;
+            }
+            try {
+                statement.executeBatch();
+                connection.commit();
+                pending = 0;
+            } catch (SQLException exception) {
+                throw new IOException("Could not write EMA results", exception);
+            }
         }
 
         @Override

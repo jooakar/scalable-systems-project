@@ -63,16 +63,13 @@ public final class TrendJob {
         // behind and accept some late events but not others.
         WatermarkStrategy<TickEvent> watermarks = WatermarkStrategy
                 .<TickEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-                .withTimestampAssigner((event, recordTimestamp) ->
-                        isUsablePriceEvent(event) ? extractEpochMillis(event) : Long.MIN_VALUE)
+                // The deserializer only emits usable price events, so every event has a valid time
+                .withTimestampAssigner((event, recordTimestamp) -> extractEpochMillis(event))
                 .withIdleness(Duration.ofMinutes(1))
                 .withWatermarkAlignment("ticks", Duration.ofMinutes(1), Duration.ofSeconds(1));
 
-        // ── Ingest and Filter ─────────────────────────────────────────────────
-        // Drop any non-price events and any events without a valid timestamp immediately,
-        // so watermarks and windows are only computed over legitimate price observations.
+        // ── Query 1: EMA computation ──────────────────────────────────────────
         DataStream<EmaResult> emas = env.fromSource(source, watermarks, "kafka-ticks")
-                .filter(TrendJob::isUsablePriceEvent)
                 .keyBy(TickEvent::id)                    // group by symbol
                 .window(TumblingEventTimeWindows.of(
                         Duration.ofMinutes(5)))          // 5-minute tumbling windows
