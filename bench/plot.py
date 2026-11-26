@@ -21,14 +21,8 @@ FIGURES = ROOT / "report/figures"
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#ffffff"
 # Task names depend on operator chaining, so match them by their first operator
-TASKS = {
-    "Source": "Kafka source + parse",
-    "TumblingEventTimeWindows": "Window/EMA + DB sink",
-    "KeyedProcess": "Crossover + DB sink",
-}
+TASKS = ["Source", "TumblingEventTimeWindows", "KeyedProcess"]
 GROUPS = ["taskmanagers", "kafka", "timescaledb", "jobmanager"]
-GROUP_NAMES = {"taskmanagers": "Flink TaskManagers", "kafka": "Kafka", "timescaledb": "TimescaleDB",
-               "jobmanager": "Flink JobManager"}
 
 # Same typeface as the report body; SVG text stays text and Typst renders it with these fonts
 for font in (ROOT / "report/fonts").glob("LibertinusSerif-*.otf"):
@@ -92,46 +86,6 @@ def save(fig, name):
     plt.close(fig)
 
 
-def cpu_figure(groups):
-    ps = list(groups)
-    fig, ax = plt.subplots(figsize=(3.3, 2.1))
-    bottom = [0.0] * len(ps)
-    x = range(len(ps))
-    for color, g in zip(SERIES, GROUPS):
-        vals = [statistics.fmean(s["cpu"][g] for s in groups[p]) for p in ps]
-        ax.bar(x, vals, bottom=bottom, color=color, width=0.6, edgecolor=SURFACE, linewidth=1,
-               label=GROUP_NAMES[g])
-        bottom = [b + v for b, v in zip(bottom, vals)]
-    for i, total in enumerate(bottom):
-        ax.text(i, total + 0.1, f"{total:.1f}", ha="center", va="bottom", color=INK, fontsize=7)
-    ax.axhline(8, color=MUTED, linestyle=(0, (3, 3)), linewidth=1)
-    ax.text(len(ps) - 0.5, 8.1, "8 cores", ha="right", va="bottom", color=MUTED, fontsize=7)
-    ax.set_xticks(list(x), [str(p) for p in ps])
-    ax.set_ylim(0, 9.5)
-    ax.set_xlabel("Flink parallelism")
-    ax.set_ylabel("CPU cores (mean while reading)")
-    ax.legend(loc="lower left", fontsize=6.5, ncols=2, bbox_to_anchor=(0, 1.0))
-    save(fig, "cpu")
-
-
-def busy_figure(groups):
-    ps = list(groups)
-    fig, axes = plt.subplots(1, 2, figsize=(3.3, 1.9), sharey=True)
-    for ax, key, title in zip(axes, ["busy", "backpressured"], ["Busy", "Backpressured"]):
-        for color, (task, name) in zip(SERIES, TASKS.items()):
-            vals = [100 * statistics.fmean(s[key].get(task, 0) for s in groups[p]) for p in ps]
-            ax.plot(ps, vals, color=color, marker="o", markersize=4, label=name)
-        ax.set_xscale("log", base=2)
-        ax.set_xticks(ps, [str(p) for p in ps])
-        ax.set_ylim(0, 105)
-        ax.set_title(title, fontsize=8, color=INK)
-    axes[0].set_ylabel("% of time (mean over subtasks)")
-    fig.supxlabel("Flink parallelism", fontsize=8, y=-0.07)
-    fig.legend(*axes[0].get_legend_handles_labels(), loc="upper center", ncols=3, fontsize=6.5,
-               bbox_to_anchor=(0.5, -0.12), handlelength=1.2, columnspacing=1)
-    save(fig, "busy")
-
-
 def ema_figure(examples):
     zone = ZoneInfo("Europe/Paris")
     symbols = list(examples)
@@ -190,11 +144,6 @@ def table(by_label):
 
 def main():
     runs = [json.loads(p.read_text()) for p in sorted((RESULTS / "runs").glob("*.json"))]
-    # Scalability of the final job on all of Monday; "main" and "tuned" compare jobs on a 20M slice
-    main_runs = [r for r in runs if r["label"] == "day"]
-    groups = by_parallelism(summarize(r) for r in main_runs)
-    cpu_figure(groups)
-    busy_figure(groups)
     labels = sorted({r["label"] for r in runs})
     table({label: by_parallelism(summarize(r) for r in runs if r["label"] == label) for label in labels})
     ema_figure(json.loads((RESULTS / "examples-week-prices.json").read_text()))
