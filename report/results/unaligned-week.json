@@ -1,0 +1,24 @@
+{
+  "note": "Week of price events before watermark alignment was added (same job otherwise)",
+  "late_upper_bound": 5506,
+  "runs": [
+    {
+      "parallelism": 4,
+      "late_dropped": 4830.0,
+      "ema_rows_different": 84044,
+      "symbols_different": 303,
+      "crossovers_different": 90,
+      "crossovers_reference": 6379,
+      "ema_max_relative_error": 0.015291345645112614
+    },
+    {
+      "parallelism": 8,
+      "late_dropped": 4205.0,
+      "ema_rows_different": 162343,
+      "symbols_different": 502,
+      "crossovers_different": 216,
+      "crossovers_reference": 6379,
+      "ema_max_relative_error": 0.015291345645112614
+    }
+  ]
+}

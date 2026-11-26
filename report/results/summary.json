@@ -1,0 +1,281 @@
+[
+  {
+    "label": "main",
+    "parallelism": 1,
+    "runs": 3,
+    "throughput_mean": 122772.65131144393,
+    "throughput_stdev": 7621.412183608807,
+    "rows_per_s": 834.2586232718894,
+    "skew": 1.0,
+    "busy": {
+      "Source": 0.16969223484848484,
+      "TumblingEventTimeWindows": 0.8634628577441078,
+      "KeyedProcess": 0.05109217171717171
+    },
+    "backpressured": {
+      "Source": 0.8156646675084175,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 0.45463191197590963,
+    "cpu": {
+      "taskmanagers": 0.2790142807944878,
+      "kafka": 0.008899773469478348,
+      "timescaledb": 0.1569361153075431,
+      "jobmanager": 0.009781742404400334
+    },
+    "restarts": 0.0,
+    "late_dropped": 0.0,
+    "price_events": 4238872.0,
+    "ema_rows": 135903.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "main",
+    "parallelism": 2,
+    "runs": 3,
+    "throughput_mean": 162586.3909788183,
+    "throughput_stdev": 10280.4231220322,
+    "rows_per_s": 1104.7989698996655,
+    "skew": 1.0080810504040525,
+    "busy": {
+      "Source": 0.1559352445394112,
+      "TumblingEventTimeWindows": 0.8430998931623931,
+      "KeyedProcess": 0.06575569800569801
+    },
+    "backpressured": {
+      "Source": 0.6655513414055081,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 0.6110147320996066,
+    "cpu": {
+      "taskmanagers": 0.3922809325158239,
+      "kafka": 0.007426843679771345,
+      "timescaledb": 0.20063439369192806,
+      "jobmanager": 0.010672562212083117
+    },
+    "restarts": 0.0,
+    "late_dropped": 0.0,
+    "price_events": 4238872.0,
+    "ema_rows": 135903.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "main",
+    "parallelism": 4,
+    "runs": 3,
+    "throughput_mean": 300366.28534798534,
+    "throughput_stdev": 12689.016270815642,
+    "rows_per_s": 2041.0340659340661,
+    "skew": 1.0456048522802426,
+    "busy": {
+      "Source": 0.1874246031746032,
+      "TumblingEventTimeWindows": 0.7733,
+      "KeyedProcess": 0.11673492063492064
+    },
+    "backpressured": {
+      "Source": 0.419302380952381,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 1.1554611032559723,
+    "cpu": {
+      "taskmanagers": 0.8327381592761208,
+      "kafka": 0.01001294363471284,
+      "timescaledb": 0.2948493925622134,
+      "jobmanager": 0.017860607782925166
+    },
+    "restarts": 0.0,
+    "late_dropped": 0.0,
+    "price_events": 4238872.0,
+    "ema_rows": 135903.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "main",
+    "parallelism": 8,
+    "runs": 3,
+    "throughput_mean": 505290.98002645496,
+    "throughput_stdev": 63657.18949182802,
+    "rows_per_s": 3433.5281746031746,
+    "skew": 1.2858928642946432,
+    "busy": {
+      "Source": 0.2712949074074074,
+      "TumblingEventTimeWindows": 0.8093234953703704,
+      "KeyedProcess": 0.1636662037037037
+    },
+    "backpressured": {
+      "Source": 0.3788971064814815,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 2.341882793377904,
+    "cpu": {
+      "taskmanagers": 1.77109512419331,
+      "kafka": 0.014911217110314186,
+      "timescaledb": 0.5252514482479056,
+      "jobmanager": 0.030625003826374005
+    },
+    "restarts": 0.0,
+    "late_dropped": 0.0,
+    "price_events": 4238872.0,
+    "ema_rows": 135903.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "prefix",
+    "parallelism": 1,
+    "runs": 1,
+    "throughput_mean": 235294.10588235295,
+    "throughput_stdev": 0,
+    "rows_per_s": 579.6470588235294,
+    "skew": 1.0,
+    "busy": {
+      "Source": 0.21277777777777776,
+      "TumblingEventTimeWindows": 0.8267777777777778,
+      "KeyedProcess": 0.11133333333333333
+    },
+    "backpressured": {
+      "Source": 0.7825555555555556,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 0.49770193641557037,
+    "cpu": {
+      "taskmanagers": 0.3577511142555534,
+      "kafka": 0.007568529661087268,
+      "timescaledb": 0.12225488188884476,
+      "jobmanager": 0.010127410610084956
+    },
+    "restarts": 0.0,
+    "late_dropped": 3030223.0,
+    "price_events": 4238872.0,
+    "ema_rows": 49270.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "prefix",
+    "parallelism": 4,
+    "runs": 1,
+    "throughput_mean": 444444.4222222222,
+    "throughput_stdev": 0,
+    "rows_per_s": 2233.733333333333,
+    "skew": 1.0456048522802426,
+    "busy": {
+      "Source": 0.293725,
+      "TumblingEventTimeWindows": 0.8829,
+      "KeyedProcess": 0.2
+    },
+    "backpressured": {
+      "Source": 0.6902999999999999,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 1.5687246715526513,
+    "cpu": {
+      "taskmanagers": 1.2163347328632739,
+      "kafka": 0.011125787943726984,
+      "timescaledb": 0.32636875738047283,
+      "jobmanager": 0.01489539336517767
+    },
+    "restarts": 0.0,
+    "late_dropped": 1323812.0,
+    "price_events": 4238872.0,
+    "ema_rows": 100518.0,
+    "crossover_rows": 0.0
+  },
+  {
+    "label": "week",
+    "parallelism": 4,
+    "runs": 1,
+    "throughput_mean": 70660.41656804734,
+    "throughput_stdev": 0,
+    "rows_per_s": 2195.816568047337,
+    "skew": 1.0390779454670536,
+    "busy": {
+      "Source": 0.07136323529411764,
+      "TumblingEventTimeWindows": 0.9013779411764706,
+      "KeyedProcess": 0.0136
+    },
+    "backpressured": {
+      "Source": 0.5260617647058823,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 0.8166530749505949,
+    "cpu": {
+      "taskmanagers": 0.45246428724489135,
+      "kafka": 0.013957669832485727,
+      "timescaledb": 0.341277724825,
+      "jobmanager": 0.008953393048217838
+    },
+    "restarts": 0.0,
+    "late_dropped": 5506.0,
+    "price_events": 59391670.0,
+    "ema_rows": 1855465.0,
+    "crossover_rows": 6379.0
+  },
+  {
+    "label": "week",
+    "parallelism": 8,
+    "runs": 1,
+    "throughput_mean": 120622.32727272727,
+    "throughput_stdev": 0,
+    "rows_per_s": 3748.4141414141413,
+    "skew": 1.161615254170409,
+    "busy": {
+      "Source": 0.08410250000000001,
+      "TumblingEventTimeWindows": 0.8791575,
+      "KeyedProcess": 0.023681249999999997
+    },
+    "backpressured": {
+      "Source": 0.3895,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 1.5080613372903753,
+    "cpu": {
+      "taskmanagers": 0.9120694379233955,
+      "kafka": 0.021427414601273228,
+      "timescaledb": 0.5585397514468327,
+      "jobmanager": 0.016024733318873885
+    },
+    "restarts": 0.0,
+    "late_dropped": 5506.0,
+    "price_events": 59391670.0,
+    "ema_rows": 1855465.0,
+    "crossover_rows": 6379.0
+  },
+  {
+    "label": "weekprefix",
+    "parallelism": 4,
+    "runs": 1,
+    "throughput_mean": 114823.17692307693,
+    "throughput_stdev": 0,
+    "rows_per_s": 2179.6807692307693,
+    "skew": 1.0390779454670536,
+    "busy": {
+      "Source": 0.14154285714285714,
+      "TumblingEventTimeWindows": 0.9076428571428571,
+      "KeyedProcess": 0.02335952380952381
+    },
+    "backpressured": {
+      "Source": 0.8429500000000001,
+      "TumblingEventTimeWindows": 0.0,
+      "KeyedProcess": 0.0
+    },
+    "cpu_total": 1.203489803518469,
+    "cpu": {
+      "taskmanagers": 0.820805044802162,
+      "kafka": 0.0182858112929803,
+      "timescaledb": 0.3562042778062253,
+      "jobmanager": 0.008194669617101368
+    },
+    "restarts": 0.0,
+    "late_dropped": 25608680.0,
+    "price_events": 59391670.0,
+    "ema_rows": 1133434.0,
+    "crossover_rows": 3279.0
+  }
+]

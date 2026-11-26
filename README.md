@@ -30,15 +30,17 @@ mvn verify         # build all modules and run tests
 
 ## Start the Cluster
 
-To start Kafka, the Flink cluster, TimescaleDB, the web dashboard, Prometheus, and Grafana in the background, run:
+To start Kafka, the Flink cluster, TimescaleDB, the web dashboard, cAdvisor, Prometheus, and Grafana in the background, run:
 
 ```bash
 docker compose up -d
 ```
 
-Kafka is reachable at `kafka:9092` from containers and `localhost:9094` from the host. TimescaleDB (user/password/db `trading`) listens on host port 5432. The web dashboard is at [http://localhost:7070](http://localhost:7070), Prometheus is at [http://localhost:9090](http://localhost:9090), and Grafana is at [http://localhost:3000](http://localhost:3000) with `admin`/`admin` credentials.
+Kafka is reachable at `kafka:9092` from containers and `localhost:9094` from the host. TimescaleDB (user/password/db `trading`) listens on host port 5432 (override with `TIMESCALEDB_PORT`). The web dashboard is at [http://localhost:7070](http://localhost:7070), Prometheus is at [http://localhost:9090](http://localhost:9090), and Grafana is at [http://localhost:3000](http://localhost:3000) with `admin`/`admin` credentials.
 
-The SQL file in `db/init/` creates the `ema_results` Timescale hypertable, indexes, and `latest_ema_results` view. Docker applies it when the database volume is first created. To reapply it to a local database, reset the project volumes with `docker compose down -v` before starting the stack again.
+Prometheus scrapes the web API, the Flink JobManager and every TaskManager replica through Flink's Prometheus reporter (port 9249), and per-container CPU and memory from cAdvisor ([http://localhost:8080](http://localhost:8080)).
+
+The SQL files in `db/init/` create the `ema_results` and `crossover_events` Timescale hypertables, their indexes, and `latest_*` views. Docker applies it when the database volume is first created. To reapply it to a local database, reset the project volumes with `docker compose down -v` before starting the stack again.
 
 ## Verify Health
 
@@ -124,12 +126,33 @@ The web API endpoints are:
 
 ## Run the Flink Job
 
-Build the Flink job and submit it to the JobManager:
+`docker compose up` builds the job and submits it through the `flink-job-submitter` service, with parallelism `PARALLELISM` (default 1). The job reads topic `ticks` from the earliest offset, so it restarts until the producer has created the topic. To resubmit by hand after a change:
 
 ```bash
 mvn -pl flink-job -am package
 docker cp flink-job/target/flink-job.jar flink-jobmanager:/opt/flink/flink-job.jar
-docker exec flink-jobmanager /opt/flink/bin/flink run \
+docker exec flink-jobmanager /opt/flink/bin/flink run -p 1 \
 	-c trading.flink.TrendJob \
 	/opt/flink/flink-job.jar
 ```
+
+## Benchmarks and Report
+
+`bench/` holds the repeatable performance evaluation behind `report/`. With the stack up and the day CSVs in `data/`, from the dev shell (`nix develop`):
+
+```bash
+mvn -pl producer,flink-job -am package
+# Scalability: first 20M Monday events, 3 runs per parallelism
+python3 bench/benchmark.py --events 20000000 --parallelism 1 2 4 8 --reps 3 --dump
+python3 bench/reference.py data/bench-20000000.csv main-p1 main-p2 main-p4 main-p8
+# Correctness: every price event of the week
+for f in data/debs2022-gc-trading-day-*.csv; do LC_ALL=C awk -F, '$22!="" && $1!~/^#/ && $1!="ID"' "$f"; done > data/week-prices.csv
+python3 bench/benchmark.py --input data/week-prices.csv --parallelism 4 8 --reps 1 --dump --label week
+python3 bench/reference.py data/week-prices.csv week-p4 week-p8
+python3 bench/plot.py
+typst compile --font-path report/fonts report/main.typ
+```
+
+`benchmark.py` preloads Kafka (8 partitions), then for each parallelism scales the TaskManagers to `parallelism / 2`, runs the job from the earliest offset until it has read every event and drained its sinks, and saves the Flink and cAdvisor series from Prometheus to `report/results/runs/`. `--dump` exports the first run per parallelism from TimescaleDB to `data/results/`. `reference.py` recomputes both queries single-threaded straight from the CSV, under batch and streaming semantics, and compares them with those exports. `plot.py` writes the figures to `report/figures/` and the summary the report reads to `report/results/summary.json`.
+
+The report's "no fix" control is the same job with the watermark strategy applied after the Kafka source instead of in it; build that variant and pass its jar with `--jar` and `--label prefix` (Monday) or `--label weekprefix` (week).
