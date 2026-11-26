@@ -142,17 +142,19 @@ docker exec flink-jobmanager /opt/flink/bin/flink run -p 1 \
 
 ```bash
 mvn -pl producer,flink-job -am package
-# Scalability: first 20M Monday events, 3 runs per parallelism
-python3 bench/benchmark.py --events 20000000 --parallelism 1 2 4 8 --reps 3 --dump
-python3 bench/reference.py data/bench-20000000.csv main-p1 main-p2 main-p4 main-p8
+# Scalability: all of Monday, 3 runs per parallelism
+python3 bench/benchmark.py --input data/debs2022-gc-trading-day-08-11-21.csv --parallelism 1 2 4 8 --reps 3 --label day
+# Optimization and Monday correctness: first 20M Monday events
+python3 bench/benchmark.py --events 20000000 --parallelism 1 2 4 8 --reps 3 --dump --label tuned
+python3 bench/reference.py data/bench-20000000.csv tuned-p1 tuned-p2 tuned-p4 tuned-p8 main-p1 main-p2 main-p4 main-p8
 # Correctness: every price event of the week
 for f in data/debs2022-gc-trading-day-*.csv; do LC_ALL=C awk -F, '$22!="" && $1!~/^#/ && $1!="ID"' "$f"; done > data/week-prices.csv
-python3 bench/benchmark.py --input data/week-prices.csv --parallelism 4 8 --reps 1 --dump --label week
-python3 bench/reference.py data/week-prices.csv week-p4 week-p8
+python3 bench/benchmark.py --input data/week-prices.csv --parallelism 4 8 --reps 1 --dump --label weektuned
+python3 bench/reference.py data/week-prices.csv weektuned-p4 weektuned-p8 week-p4 week-p8 weekprefix-p4
 python3 bench/plot.py
 typst compile --font-path report/fonts report/main.typ
 ```
 
 `benchmark.py` preloads Kafka (8 partitions), then for each parallelism scales the TaskManagers to `parallelism / 2`, runs the job from the earliest offset until it has read every event and drained its sinks, and saves the Flink and cAdvisor series from Prometheus to `report/results/runs/`. `--dump` exports the first run per parallelism from TimescaleDB to `data/results/`. `reference.py` recomputes both queries single-threaded straight from the CSV, under batch and streaming semantics, and compares them with those exports. `plot.py` writes the figures to `report/figures/` and the summary the report reads to `report/results/summary.json`.
 
-The report's "no fix" control is the same job with the watermark strategy applied after the Kafka source instead of in it; build that variant and pass its jar with `--jar` and `--label prefix` (Monday) or `--label weekprefix` (week).
+The report's baseline (`main`, `week`) is the job before batching the EMA sink and filtering in the deserializer (commit `6cd7ba4`), and `batched` is that job with only the sink batched; build those jars and pass them with `--jar` and `--label`. The "no fix" control is the same job with the watermark strategy applied after the Kafka source instead of in it; build that variant and pass its jar with `--jar` and `--label prefix` (Monday) or `--label weekprefix` (week).

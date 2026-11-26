@@ -22,7 +22,7 @@ SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
 INK, MUTED, GRID, SURFACE = "#0b0b0b", "#52514e", "#e4e3df", "#ffffff"
 # Task names depend on operator chaining, so match them by their first operator
 TASKS = {
-    "Source": "Kafka source + filter",
+    "Source": "Kafka source + parse",
     "TumblingEventTimeWindows": "Window/EMA + DB sink",
     "KeyedProcess": "Crossover + DB sink",
 }
@@ -73,6 +73,7 @@ def summarize(run):
         "skew": max(run["read_per_subtask"]) / statistics.fmean(run["read_per_subtask"]),
         "cpu": {g: mean_in(only(s[f"cpu_cores:{g}"]), start, end) for g in GROUPS},
         "busy": busy, "backpressured": bp,
+        "paused": mean_in(only(s["paused_ms_per_s"]), start, end) / 1000 if "paused_ms_per_s" in s else None,
         "late_dropped": run["late_dropped"], "price_events": run["price_events"], "restarts": run["restarts"],
         "ema_rows": run["ema_rows"], "crossover_rows": run["crossover_rows"],
     }
@@ -106,7 +107,8 @@ def throughput_figure(groups):
         ax.annotate(f"{m:.0f}k", (p, m), textcoords="offset points", xytext=(6, -10), color=INK, fontsize=7)
     ax.set_xscale("log", base=2)
     ax.set_xticks(ps, [str(p) for p in ps])
-    ax.set_ylim(0, mean[0] * ps[-1] * 1.05)
+    # The linear line leaves the plot past p = 2; scaling to it would flatten the measurements
+    ax.set_ylim(0, max(m + h for m, h in zip(mean, hi)) * 1.5)
     ax.set_xlabel("Flink parallelism (TaskManagers = parallelism / 2)")
     ax.set_ylabel("Events/s (thousands)")
     save(fig, "throughput")
@@ -152,28 +154,6 @@ def busy_figure(groups):
     save(fig, "busy")
 
 
-def timeseries_figure(run):
-    s = run["series"]
-    start = run["t_running"]
-
-    def line(ax, series, scale=1.0, **kw):
-        ax.plot([t - start for t, _ in series], [v / scale for _, v in series], **kw)
-    fig, (events, rows, cpu) = plt.subplots(3, 1, figsize=(3.3, 3.3), sharex=True)
-    line(events, only(s["read_rate"]), 1e3, color=SERIES[0])
-    events.set_ylabel("Events read/s (k)")
-    line(rows, only(s["rows_written_rate"]), color=SERIES[0])
-    rows.set_ylabel("Rows written/s")
-    rows.set_ylim(bottom=0)
-    for color, g in zip(SERIES, GROUPS):
-        line(cpu, only(s[f"cpu_cores:{g}"]), color=color, label=GROUP_NAMES[g])
-    cpu.set_ylabel("CPU cores")
-    cpu.set_ylim(0, 4)
-    cpu.set_xlabel(f"Seconds since job start (parallelism {run['parallelism']})")
-    cpu.legend(loc="upper right", fontsize=6.5, ncols=2, handlelength=1.2)
-    fig.align_ylabels()
-    save(fig, "timeseries")
-
-
 def ema_figure(examples):
     zone = ZoneInfo("Europe/Paris")
     symbols = list(examples)
@@ -215,6 +195,7 @@ def table(by_label):
                 "skew": statistics.fmean(r["skew"] for r in runs),
                 "busy": {t: statistics.fmean(r["busy"].get(t, 0) for r in runs) for t in TASKS},
                 "backpressured": {t: statistics.fmean(r["backpressured"].get(t, 0) for r in runs) for t in TASKS},
+                "paused": None if any(r["paused"] is None for r in runs) else statistics.fmean(r["paused"] for r in runs),
                 "cpu_total": statistics.fmean(sum(r["cpu"].values()) for r in runs),
                 "cpu": {g: statistics.fmean(r["cpu"][g] for r in runs) for g in GROUPS},
                 "restarts": sum(r["restarts"] for r in runs),
@@ -230,12 +211,12 @@ def table(by_label):
 
 def main():
     runs = [json.loads(p.read_text()) for p in sorted((RESULTS / "runs").glob("*.json"))]
-    main_runs = [r for r in runs if r["label"] == "main"]
+    # Scalability of the final job on all of Monday; "main" and "tuned" compare jobs on a 20M slice
+    main_runs = [r for r in runs if r["label"] == "day"]
     groups = by_parallelism(summarize(r) for r in main_runs)
     throughput_figure(groups)
     cpu_figure(groups)
     busy_figure(groups)
-    timeseries_figure(next(r for r in main_runs if r["parallelism"] == 4 and r["rep"] == 0))
     labels = sorted({r["label"] for r in runs})
     table({label: by_parallelism(summarize(r) for r in runs if r["label"] == label) for label in labels})
     ema_figure(json.loads((RESULTS / "examples-week-prices.json").read_text()))
