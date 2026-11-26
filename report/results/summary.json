@@ -25,6 +25,12 @@
       "timescaledb": 0.1527930078148809,
       "jobmanager": 0.014021690913569479
     },
+    "memory_peak": {
+      "taskmanagers": 1473339392.0,
+      "kafka": 1027919872.0,
+      "timescaledb": 164057088.0,
+      "jobmanager": 1107750912.0
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 4238872.0,
@@ -56,6 +62,12 @@
       "kafka": 0.025947513372676895,
       "timescaledb": 0.2678813845441168,
       "jobmanager": 0.024335679400281165
+    },
+    "memory_peak": {
+      "taskmanagers": 803519146.6666666,
+      "kafka": 989246805.3333334,
+      "timescaledb": 162444629.33333334,
+      "jobmanager": 1033763498.6666666
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -89,6 +101,12 @@
       "timescaledb": 0.3608365883675371,
       "jobmanager": 0.03263354303655137
     },
+    "memory_peak": {
+      "taskmanagers": 794107904.0,
+      "kafka": 954374826.6666666,
+      "timescaledb": 164941824.0,
+      "jobmanager": 1032781824.0
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 11794520.0,
@@ -120,6 +138,12 @@
       "kafka": 0.0371900790378999,
       "timescaledb": 0.6339667192700603,
       "jobmanager": 0.05308472155657168
+    },
+    "memory_peak": {
+      "taskmanagers": 1577779200.0,
+      "kafka": 918492501.3333334,
+      "timescaledb": 179978240.0,
+      "jobmanager": 1087122090.6666667
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -153,6 +177,12 @@
       "timescaledb": 0.8079695784993576,
       "jobmanager": 0.07367393610262563
     },
+    "memory_peak": {
+      "taskmanagers": 3035305301.3333335,
+      "kafka": 824651776.0,
+      "timescaledb": 205366613.33333334,
+      "jobmanager": 1112853162.6666667
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 11794520.0,
@@ -184,6 +214,12 @@
       "kafka": 0.008899773469478348,
       "timescaledb": 0.1569361153075431,
       "jobmanager": 0.009781742404400334
+    },
+    "memory_peak": {
+      "taskmanagers": 2489516032.0,
+      "kafka": 861298688.0,
+      "timescaledb": 163179178.66666666,
+      "jobmanager": 1039022762.6666666
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -217,6 +253,12 @@
       "timescaledb": 0.20063439369192806,
       "jobmanager": 0.010672562212083117
     },
+    "memory_peak": {
+      "taskmanagers": 781111296.0,
+      "kafka": 859348992.0,
+      "timescaledb": 167587840.0,
+      "jobmanager": 1111287125.3333333
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 4238872.0,
@@ -248,6 +290,12 @@
       "kafka": 0.01001294363471284,
       "timescaledb": 0.2948493925622134,
       "jobmanager": 0.017860607782925166
+    },
+    "memory_peak": {
+      "taskmanagers": 1536656725.3333333,
+      "kafka": 861207210.6666666,
+      "timescaledb": 173682688.0,
+      "jobmanager": 1131025749.3333333
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -281,6 +329,12 @@
       "timescaledb": 0.5252514482479056,
       "jobmanager": 0.030625003826374005
     },
+    "memory_peak": {
+      "taskmanagers": 3026421077.3333335,
+      "kafka": 843225770.6666666,
+      "timescaledb": 189520554.66666666,
+      "jobmanager": 1176653824.0
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 4238872.0,
@@ -312,6 +366,12 @@
       "kafka": 0.007568529661087268,
       "timescaledb": 0.12225488188884476,
       "jobmanager": 0.010127410610084956
+    },
+    "memory_peak": {
+      "taskmanagers": 3105271808.0,
+      "kafka": 762331136.0,
+      "timescaledb": 164151296.0,
+      "jobmanager": 1204826112.0
     },
     "restarts": 0.0,
     "late_dropped": 3030223.0,
@@ -345,6 +405,12 @@
       "timescaledb": 0.32636875738047283,
       "jobmanager": 0.01489539336517767
     },
+    "memory_peak": {
+      "taskmanagers": 3716952064.0,
+      "kafka": 763936768.0,
+      "timescaledb": 174051328.0,
+      "jobmanager": 1226432512.0
+    },
     "restarts": 0.0,
     "late_dropped": 1323812.0,
     "price_events": 4238872.0,
@@ -376,6 +442,12 @@
       "kafka": 0.011706781649442251,
       "timescaledb": 0.17946141661056936,
       "jobmanager": 0.03326955825816963
+    },
+    "memory_peak": {
+      "taskmanagers": 775057408.0,
+      "kafka": 1016168448.0,
+      "timescaledb": 159783594.66666666,
+      "jobmanager": 1162627754.6666667
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -409,6 +481,12 @@
       "timescaledb": 0.2863159041757304,
       "jobmanager": 0.059816238977375445
     },
+    "memory_peak": {
+      "taskmanagers": 769216512.0,
+      "kafka": 1012370090.6666666,
+      "timescaledb": 161995434.66666666,
+      "jobmanager": 1203595946.6666667
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 4238872.0,
@@ -440,6 +518,12 @@
       "kafka": 0.020993171542469186,
       "timescaledb": 0.32715651339131263,
       "jobmanager": 0.07137700890688081
+    },
+    "memory_peak": {
+      "taskmanagers": 1538869930.6666667,
+      "kafka": 1012311381.3333334,
+      "timescaledb": 170564266.66666666,
+      "jobmanager": 1130898773.3333333
     },
     "restarts": 0.0,
     "late_dropped": 0.0,
@@ -473,6 +557,12 @@
       "timescaledb": 0.43266336480743356,
       "jobmanager": 0.08843676089658199
     },
+    "memory_peak": {
+      "taskmanagers": 2965923157.3333335,
+      "kafka": 1146690218.6666667,
+      "timescaledb": 198145365.33333334,
+      "jobmanager": 1173389312.0
+    },
     "restarts": 0.0,
     "late_dropped": 0.0,
     "price_events": 4238872.0,
@@ -504,6 +594,12 @@
       "kafka": 0.013957669832485727,
       "timescaledb": 0.341277724825,
       "jobmanager": 0.008953393048217838
+    },
+    "memory_peak": {
+      "taskmanagers": 3792584704.0,
+      "kafka": 852631552.0,
+      "timescaledb": 177700864.0,
+      "jobmanager": 1245024256.0
     },
     "restarts": 0.0,
     "late_dropped": 5506.0,
@@ -537,6 +633,12 @@
       "timescaledb": 0.5585397514468327,
       "jobmanager": 0.016024733318873885
     },
+    "memory_peak": {
+      "taskmanagers": 3095756800.0,
+      "kafka": 847626240.0,
+      "timescaledb": 229732352.0,
+      "jobmanager": 1243947008.0
+    },
     "restarts": 0.0,
     "late_dropped": 5506.0,
     "price_events": 59391670.0,
@@ -568,6 +670,12 @@
       "kafka": 0.0182858112929803,
       "timescaledb": 0.3562042778062253,
       "jobmanager": 0.008194669617101368
+    },
+    "memory_peak": {
+      "taskmanagers": 2773782528.0,
+      "kafka": 580620288.0,
+      "timescaledb": 179265536.0,
+      "jobmanager": 1072635904.0
     },
     "restarts": 0.0,
     "late_dropped": 25608680.0,
@@ -601,6 +709,12 @@
       "timescaledb": 0.9506294618956592,
       "jobmanager": 0.03904240205608292
     },
+    "memory_peak": {
+      "taskmanagers": 1600012288.0,
+      "kafka": 1493766144.0,
+      "timescaledb": 198836224.0,
+      "jobmanager": 984993792.0
+    },
     "restarts": 0.0,
     "late_dropped": 5506.0,
     "price_events": 59391670.0,
@@ -632,6 +746,12 @@
       "kafka": 0.07769608024227892,
       "timescaledb": 1.299727941161428,
       "jobmanager": 0.05779776740109864
+    },
+    "memory_peak": {
+      "taskmanagers": 4282920960.0,
+      "kafka": 1366986752.0,
+      "timescaledb": 217223168.0,
+      "jobmanager": 958996480.0
     },
     "restarts": 0.0,
     "late_dropped": 5506.0,

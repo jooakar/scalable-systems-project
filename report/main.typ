@@ -232,7 +232,10 @@ bounds this lag. Measured before the optimizations below, it cost
 #pct(1 - base-tp(1) / at(unaligned-tp, 1).throughput_mean, digits: 0) of throughput at
 parallelism 1 and gained
 #pct(base-tp(pmax) / at(unaligned-tp, pmax).throughput_mean - 1, digits: 0) at
-parallelism #pmax.
+parallelism #pmax. Accepting the republished events instead, as a batch computation would,
+changes #num(cmp(correctness, "weektuned-p4", semantics: "batch").ema_rows_different) later
+windows of #correctness.late_symbols symbols, a result a stream processor could only reach by
+retracting windows it had already emitted.
 
 == Throughput and Scalability <sec-opt>
 
@@ -318,8 +321,14 @@ partitions.
 
 At parallelism #pmax the TaskManagers use #num(at(main-runs, pmax).cpu.taskmanagers, digits: 1)
 cores, TimescaleDB #num(at(main-runs, pmax).cpu.timescaledb, digits: 1) and Kafka almost none,
-since it serves the preloaded batches from memory. No component uses the GPU. Memory caused
-more trouble than CPU: the original windows buffered every event and ran the 1 GB TaskManagers
+since it serves the preloaded batches from memory. No component uses the GPU. Each TaskManager
+peaks at about
+#num(calc.max(..main-runs.map(r => r.memory_peak.taskmanagers / calc.ceil(r.parallelism / 2))) / 1048576)
+MB of its 1 GB, so TaskManager memory grows linearly with parallelism, while Kafka peaks at
+#num(calc.max(..main-runs.map(r => r.memory_peak.kafka)) / 1073741824, digits: 1) GB, the
+JobManager at #num(calc.max(..main-runs.map(r => r.memory_peak.jobmanager)) / 1073741824, digits: 1) GB
+and TimescaleDB at #num(calc.max(..main-runs.map(r => r.memory_peak.timescaledb)) / 1073741824, digits: 1) GB.
+Memory still caused more trouble than CPU: the original windows buffered every event and ran the 1 GB TaskManagers
 out of heap, and Flink's default checkpoint storage, capped at 5 MB per task, overflowed after
 two days of data at parallelism 1 and left the job in a restart loop. Pre-reducing windows, a
 smaller managed memory share and checkpoints on a shared volume fixed both.

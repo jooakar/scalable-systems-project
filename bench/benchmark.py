@@ -31,6 +31,8 @@ SOURCE = 'operator_name="Source:_kafka_ticks"'
 CONTAINERS = {
     "kafka": "kafka",
     "jobmanager": "flink-jobmanager",
+    # cAdvisor keeps reporting replicas for a while after a scale-down, so run_once narrows this
+    # to the replicas in use
     "taskmanagers": ".*taskmanager.*",
     "timescaledb": "timescaledb",
 }
@@ -116,6 +118,11 @@ def preload(path):
     return {"events": int(sent), "seconds": float(seconds.replace(",", ".")), "events_per_s": int(rate)}
 
 
+def live_taskmanagers(parallelism):
+    """Container names of the TaskManager replicas a run uses; Compose numbers them from 1."""
+    return f".*taskmanager-([1-{math.ceil(parallelism / SLOTS_PER_TM)}])$"
+
+
 def scale_taskmanagers(count):
     sh("docker", "compose", "up", "-d", "--no-deps", "--scale", f"taskmanager={count}", "taskmanager")
     wait_for(lambda: (o := http(f"{FLINK}/overview"))["taskmanagers"] == count
@@ -164,6 +171,7 @@ def run_once(jar_id, parallelism, events):
     ema_rows, crossover_rows = map(int, last[0].split("|"))
 
     start, end = t_running - 10, t_drained + 5
+    containers = {**CONTAINERS, "taskmanagers": live_taskmanagers(parallelism)}
     series = {
         "records_read": prom_range(read, start, end),
         "read_rate": prom_range(
@@ -180,10 +188,10 @@ def run_once(jar_id, parallelism, events):
             f"avg by (task_name) (flink_taskmanager_job_task_backPressuredTimeMsPerSecond{{{job}}})", start, end),
         **{f"cpu_cores:{name}": prom_range(
             f'sum(rate(container_cpu_usage_seconds_total{{name=~"{regex}"}}[15s]))', start, end)
-           for name, regex in CONTAINERS.items()},
+           for name, regex in containers.items()},
         **{f"memory_bytes:{name}": prom_range(
             f'sum(container_memory_working_set_bytes{{name=~"{regex}"}})', start, end)
-           for name, regex in CONTAINERS.items()},
+           for name, regex in containers.items()},
     }
     # Events read per source subtask, i.e. per Kafka partition group, to quantify skew
     per_subtask = [float(r["value"][1]) for r in prom(

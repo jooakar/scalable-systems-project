@@ -66,6 +66,8 @@ def summarize(run):
         "rows_per_s": run["ema_rows"] / (end - start),
         "skew": max(run["read_per_subtask"]) / statistics.fmean(run["read_per_subtask"]),
         "cpu": {g: mean_in(only(s[f"cpu_cores:{g}"]), start, end) for g in GROUPS},
+        "memory_peak": {g: max((v for t, v in only(s[f"memory_bytes:{g}"]) if start <= t <= end), default=0)
+                        for g in GROUPS},
         "busy": busy, "backpressured": bp,
         "paused": mean_in(only(s["paused_ms_per_s"]), start, end) / 1000 if "paused_ms_per_s" in s else None,
         "late_dropped": run["late_dropped"], "price_events": run["price_events"], "restarts": run["restarts"],
@@ -131,6 +133,7 @@ def table(by_label):
                 "paused": None if any(r["paused"] is None for r in runs) else statistics.fmean(r["paused"] for r in runs),
                 "cpu_total": statistics.fmean(sum(r["cpu"].values()) for r in runs),
                 "cpu": {g: statistics.fmean(r["cpu"][g] for r in runs) for g in GROUPS},
+                "memory_peak": {g: statistics.fmean(r["memory_peak"][g] for r in runs) for g in GROUPS},
                 "restarts": sum(r["restarts"] for r in runs),
                 "late_dropped": statistics.fmean(r["late_dropped"] for r in runs),
                 "price_events": statistics.fmean(r["price_events"] for r in runs),
