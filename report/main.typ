@@ -9,6 +9,10 @@
 #let producer = json("results/producer-bench-20000000.json")
 #let day = json("results/producer-debs2022-gc-trading-day-08-11-21.json")
 #let week = json("results/producer-week-prices.json")
+#let dataset = json("results/dataset.json")
+#let mon = dataset.at("debs2022-gc-trading-day-08-11-21")
+#let wk = dataset.at("week-prices")
+#let latency = json("results/latency.json")
 #let runs(label) = summary.filter(r => r.label == label)
 // "main" is the first version of the job, "batched" adds the batched sink, "tuned" is the
 // final job, all on the 20M-event slice; "day" is the final job on all of Monday
@@ -38,6 +42,7 @@
 #let broken = cmp(correctness, "weekprefix-p4")
 #let late-of(label, p) = at(runs(label), p).late_dropped
 #let identical(c) = c.ema_rows_different == 0 and c.crossovers_matched == c.crossovers_reference
+#let todo(body) = text(fill: red)[*TODO:* #body]
 
 #show: acmart.with(
   format: "sigconf",
@@ -57,54 +62,24 @@
   authors: (
     (
       name: "Joona Kärkkäinen",
-      affiliation: (
-        institution: "Aalto University",
-        city: "Espoo",
-        country: "Finland",
-      ),
+      affiliation: (institution: "Aalto University", city: "Espoo", country: "Finland"),
+    ),
+    (
+      name: "Aleksi Kuusinen",
+      affiliation: (institution: "Aalto University", city: "Espoo", country: "Finland"),
+    ),
+    (
+      name: "Axel Andersson",
+      affiliation: (institution: "Aalto University", city: "Espoo", country: "Finland"),
     ),
   ),
-  abstract: [
-    We present a stream processing system that computes exponential moving averages (EMAs) over
-    5-minute tumbling windows for every symbol in the DEBS 2022 trading data set and turns their
-    crossovers into buy and sell advisories. Events are replayed into Apache Kafka, processed by an
-    Apache Flink job, stored in TimescaleDB and shown in a web trading terminal, while Prometheus
-    collects metrics from Flink and from every container. These metrics showed the job waiting
-    on one database transaction per result; batching the writes and skipping non-price events
-    before parsing them raised throughput
-    #num(slice-tp(1) / base-tp(1), digits: 0)-fold at parallelism 1. On a single 8-core laptop the final job
-    processes #kev(tp(1)) events/s at parallelism 1 and up to #kev(tp-max) events/s. Comparing the output with an independent reference implementation exposed a
-    watermarking bug that silently discarded
-    #pct(late-of("weekprefix", 4) / correctness.price_events, digits: 0) of a week's price events,
-    and a rarer nondeterminism when the job reads a backlog. With per-partition watermarks and
-    watermark alignment, the output for the whole week is identical to the reference at every
-    parallelism we tested.
-  ],
+  abstract: [#todo[Abstract (team).]],
   keywords: ("stream processing", "complex event processing", "Apache Flink", "Apache Kafka"),
 )
 
 = Introduction
 
-Market data terminals help traders spot investment opportunities in high-volume streams of
-financial events. A common intraday strategy watches two EMAs of a symbol's price: when the
-short-interval EMA overtakes the long-interval one, the price is starting to rise (a bullish
-breakout, so buy); when it falls below, the price is starting to drop (a bearish breakout, so
-sell). The advisory is only useful if it arrives while the price is still favorable, so the
-computation has to keep up with the market in real time.
-
-The project data set @debs2022data holds 289 million events recorded by Infront Financial
-Technology from 8 to 14 November 2021 for 5504 equities and indices on the Paris, Amsterdam and
-Frankfurt exchanges. The project defines two queries. *Query 1* computes, for each symbol $s$ and
-5-minute tumbling window $w_i$ starting from midnight, $"EMA"^j_(s,w_i) = "Close"_(s,w_i) dot
-2/(1+j) + "EMA"^j_(s,w_(i-1)) dot (1 - 2/(1+j))$ for $j in {38, 100}$, where the close is the last
-price observed in the window and $"EMA"^j_(s,w_0) = 0$. *Query 2* emits a buy advisory when
-$"EMA"^38$ rises above $"EMA"^100$ between two consecutive windows and a sell advisory when it
-falls below. All symbols must be computed, while the user only needs updates for the symbols
-they subscribe to.
-
-Section 2 describes the architecture, Section 3 its implementation, Section 4 evaluates
-correctness, scalability and resource use, and Section 5 concludes. The source code, the
-benchmark harness and this report are in the project's GitHub repository.
+#todo[Introduction (team): background, the data set and the two queries.]
 
 = System Architecture
 
@@ -125,13 +100,13 @@ benchmark harness and this report are in the project's GitHub repository.
       box(width: 100%, inset: 4pt, radius: 2pt, stroke: 0.5pt + luma(110), stack(
         spacing: 2.5pt,
         [*Apache Flink job* #h(1fr) parallelism $p$, $ceil(p\/2)$ TaskManagers],
-        node([Source #sym.arrow.r filter price events], []),
+        node([Source: skip non-price events, assign event time], []),
         arrow[keyBy symbol],
         node([5-min tumbling window #sym.arrow.r EMA-38/100], [Query 1]),
         arrow[keyBy symbol],
         node("Crossover detector", [Query 2]),
       )),
-      arrow[JDBC upserts],
+      arrow[batched JDBC upserts],
       node("TimescaleDB", [`ema_results`, `crossover_events`]),
       arrow[REST API],
       node("Web terminal", [Javalin + React]),
@@ -143,110 +118,102 @@ benchmark harness and this report are in the project's GitHub repository.
   caption: [System architecture. Every component runs as a Docker Compose service.],
 ) <fig-arch>
 
-@fig-arch shows the pipeline. We picked components that each own one concern and can be
-scaled on their own.
+@fig-arch shows the pipeline. #todo[Overview and design rationale of the Flink job (windows, EMA
+and crossover state), subscriptions and the web terminal (team).]
 
 *Kafka as the replay buffer.* A producer replays the CSV files into Kafka, which decouples the
 data source from processing: the job can be restarted, rescaled or rerun from the earliest
-offset without touching the producer, and the benchmark can preload events so it measures the
-job alone. Events are keyed by symbol, so each symbol's events stay ordered within one
-partition. The topic has 8 partitions, which caps the useful source parallelism at 8.
+offset without touching the producer, and the benchmark preloads events so it measures the job
+alone. Events are keyed by symbol, so each symbol's events stay ordered within one partition.
+The 8 partitions cap the useful source parallelism at 8.
 
-*Flink for windowing and pattern detection.* Both queries are keyed by symbol, which Flink's
-`keyBy` spreads over parallel subtasks with each symbol's state on exactly one subtask. Query 1
-maps directly to event-time tumbling windows. Windows are aligned to the epoch, and because the
-CET offset of the data is a whole hour, they also start at midnight CET as required. A window
-fires when the watermark passes its end, which happens once events of the next window arrive
-plus a 5-second bound on out-of-orderness. Watermarks are tracked per Kafka partition, and
-watermark alignment pauses any partition that runs more than a minute ahead of the slowest one
-(@sec-correct explains both). The previous window's EMAs are kept in keyed
-`ValueState`. Query 2 is a `KeyedProcessFunction` over the EMA stream that stores the previous
-pair of EMAs and applies the crossover conditions. Windows without a price event produce no
-result, so a symbol's EMA advances only when it trades.
+*Event time and watermarks.* A window fires when the watermark passes its end, that is once
+events of the next window arrive plus a 5-second bound on out-of-orderness. The Kafka source
+tracks a watermark per partition and forwards their minimum, and watermark alignment pauses
+any partition that runs more than a minute of event time ahead of the slowest one
+(@sec-correct shows why both are needed). Only price events carry event time; the source
+drops all others before they reach the watermark generator.
 
-*TimescaleDB for results.* Results are upserted into hypertables keyed by
-`(symbol, window_end)`. The EMA sink commits its upserts in batches (@sec-opt); advisories are
-written one at a time so they reach the terminal at once. Upserts make the sinks idempotent: Flink checkpoints state and Kafka
-offsets every minute to a shared volume, and after a failure it replays from the last
-checkpoint and rewrites the same rows, so the stored results are the same as for a failure-free run.
-
-*Subscriptions in the client.* The job computes every symbol, as the specification requires.
-The subscribed subset is the terminal's watchlist: the browser fetches updates only for the
-watched symbols, plus a feed of the latest advisories across all symbols.
+*Results and fault tolerance.* Results are upserted into TimescaleDB hypertables keyed by
+`(symbol, window_end)`, which makes the sinks idempotent. Flink checkpoints state and Kafka
+offsets every minute to a volume shared by all Flink containers, and after a failure it replays
+from the last checkpoint and rewrites the same rows. The EMA sink commits its upserts in
+batches, triggered three ways: 1000 queued rows amortize commits under load, a passing
+watermark (right after windows fire) keeps the terminal current at low rates, and a checkpoint
+never covers rows that are not committed. Advisories are rare and must reach the trader at
+once, so they are written one at a time.
 
 *Observability.* Flink's Prometheus reporter exposes operator and task metrics (records in and
-out, late records dropped, busy and backpressured time), and cAdvisor exposes CPU and memory per
-container. Prometheus discovers each TaskManager replica through DNS, so scaling the service
-needs no configuration change.
+out, late records dropped, busy, backpressured and alignment-paused time), and cAdvisor exposes
+CPU and memory per container. Prometheus discovers each TaskManager replica through DNS, so
+scaling the service needs no configuration change.
 
 = Implementation
 
-The JVM modules are a Maven multi-module project in Java 21: a shared event schema, the
-producer, the Flink job and the web backend. The stack runs on Docker Compose with Kafka 4.3.1
-in KRaft mode, Flink 2.3.0, TimescaleDB 2.30.2 on PostgreSQL 18, Prometheus 3.8.0, Grafana
-12.2.0 and cAdvisor 0.52.1. A one-shot container builds the job and submits it through Flink's
-REST API on startup. A Nix flake pins the development tools.
+#todo[Module layout, stack and versions, the Flink job's windowing, EMA state and crossover
+detection, and the web terminal (team).]
 
 *Producer.* The producer streams each CSV line, keeps the attributes the queries need (ID,
-security type, date, time, last price, trading time and trading date) and sends them as JSON
-with LZ4-compressed batching. It replays all #mev(day.events) events of Monday in
-#num(day.seconds) s (#kev(day.events_per_s) events/s). An optional rate limit simulates live arrival.
+security type, date, time, last price, trading time and trading date) and sends them to Kafka as
+JSON with empty fields omitted, in LZ4-compressed batches. Symbols already carry their exchange
+code (`ID.[Exchange]`), so they need no normalization and serve directly as Kafka keys. It
+replays all #mev(day.events) events of Monday in #num(day.seconds) s
+(#kev(day.events_per_s) events/s). A rate limit can replay at a fixed number of events per
+second, and for latency measurements the producer logs when it sent the first price event of
+each window.
 
-*Flink job.* The source's deserializer skips events that carry no price before parsing them
-and drops price events without a positive price or a valid time. Event time comes from the
-trading date and time, falling back to the system date and time when they are empty (the
-trading date is missing for most events). The window pre-reduces to the
-latest event by trading time, so its state is one event per symbol and open window instead of
-every event, and a `ProcessWindowFunction` turns that event into the window's EMAs.
+*Event handling in the source.* Most events are housekeeping or quote updates without a price.
+Since empty fields are omitted, the deserializer recognizes them by the missing `"last"` key and
+skips them without parsing. It parses price events and drops those whose price is not positive
+or whose time is missing or invalid. Event time comes from the trading date and time, falling
+back to the system date and time when they are empty (the trading date is missing for most
+events), and is parsed once per event. The window pre-reduces to the latest event by trading
+time, so its state is one event per symbol and open window.
 
-*Web terminal.* A Javalin server exposes the results through a REST API and serves a React and
-TypeScript frontend built with Vite. For the selected symbol it draws the price with both EMAs,
-BUY and SELL markers at each crossover and the EMA spread below, next to the watchlist and a
-live feed of advisories. Grafana shows the system metrics.
-
-*Benchmark harness.* `bench/benchmark.py` preloads Kafka, scales the TaskManagers, submits the
-job at a given parallelism, waits until it has read every event and its sinks have drained, and
-saves the Prometheus series of the run. `bench/reference.py` recomputes both queries
-single-threaded from the CSV, and `bench/plot.py` draws the figures in this report.
+*Benchmark harness.* `bench/benchmark.py` preloads Kafka, scales the TaskManagers, runs the
+job at a given parallelism until it has read every event and its sinks have drained, and saves
+the run's Prometheus series. `bench/latency.py` measures result latency at fixed input rates,
+`bench/reference.py` recomputes both queries single-threaded from the CSV, and
+`bench/dataset.py` describes the workloads. Section 4 reads every number from their output.
 
 = Performance Evaluation
 
-*Setup.* All experiments run on an Apple M1 laptop (8 cores, 16 GB) with the containers in an
-OrbStack Linux VM limited to 8 CPUs and 8 GB of memory. Each TaskManager has 2 slots and 1 GB of
-memory, and a job at parallelism $p$ runs on $ceil(p\/2)$ TaskManagers. Workloads are preloaded
-into Kafka, so every run reads the same backlog as fast as it can.
+*Setup.* All experiments run on an Apple M1 laptop (four performance and four efficiency cores,
+16 GB) with the containers in an OrbStack Linux VM limited to 8 CPUs and 8 GB of memory. Each
+TaskManager has 2 slots and 1 GB of memory, and a job at parallelism $p$ runs on $ceil(p\/2)$
+TaskManagers.
 
-- *Scalability workload:* all #mev(day.events) events of Monday, of which
-  #mev(at(main-runs, 1).price_events, digits: 1) are price events. Each configuration runs
-  #at(main-runs, 1).runs times.
-- *Optimization workload:* the first #mev(producer.events, digits: 0) events of Monday (00:00
-  to 11:56 CET), which we used to compare versions of the job.
-- *Correctness workload:* the price events of the whole week
-  (#mev(week.events, digits: 1) events, #correctness.symbols symbols). The Monday slice alone
-  produces no advisories: both EMAs start from zero and EMA-100 converges slowly, so the first
-  crossovers appear on the second trading day. Non-price events are filtered out before the
-  windows and do not advance watermarks, so leaving them out changes no result.
+*Workloads.* Monday has #mev(mon.events) events for #mon.symbols symbols, from all three
+exchanges: #pct(mon.exchange_share.FR, digits: 0) Paris,
+#pct(mon.exchange_share.NL, digits: 0) Amsterdam and #pct(mon.exchange_share.ETR, digits: 0)
+Frankfurt. Only #pct(at(main-runs, 1).price_events / day.events, digits: 0) are price events,
+and while indices are #pct(mon.type_share.I, digits: 0) of all events, they produce
+#pct(wk.type_share.I, digits: 0) of the week's price events.
+The load is bursty, averaging #num(mon.mean_events_per_s) events/s over the day with a peak of
+#kev(mon.peak_events_per_s) events/s at #mon.peak_second.split(" ").last() CET, and long-tailed:
+the busiest 1% of symbols produce #pct(mon.top1pct_symbols_share, digits: 0) of the events and
+the busiest 10% produce #pct(mon.top10pct_symbols_share, digits: 0). We use all of Monday for scalability, its first
+#mev(producer.events, digits: 0) events (00:00 to 11:56 CET) to compare versions of the job
+and to measure latency, and the week's #mev(week.events) price events for correctness, since
+the Monday slice produces no advisories (EMA-100 starts from zero and converges slowly).
+Non-price events affect no result, so the week workload leaves them out.
 
-Throughput is events read divided by the time from the first to the last scraped increase of
-the Kafka consumer's record counter. Prometheus scrapes Flink every second, so durations are
-resolved to #sym.plus.minus 1 s: about #pct(1 / (day.events / tp(1)), digits: 0) at $p = 1$
-and #pct(1 / (day.events / tp(pmax)), digits: 0) at $p = #pmax$.
+Throughput runs read a preloaded backlog as fast as they can. Throughput is events read
+divided by the time from the first to the last increase of the Kafka consumer's record counter,
+which Prometheus scrapes every second, so durations are resolved to #sym.plus.minus 1 s, about
+#pct(1 / (day.events / tp(pmax)), digits: 0) of the shortest scalability run.
 
 == Correctness <sec-correct>
 
-`bench/reference.py` is an independent implementation that reads the CSV directly, so it shares
-no code, serialization or ordering with Kafka and Flink. It applies the same filter, event time
-and window assignment, picks the close by latest trading time, iterates the EMA recursion and
-applies the crossover conditions. It computes two variants. *Batch semantics* accept every
-event. *Streaming semantics* follow the specification: a window is evaluated once the next
-window starts, so an event that arrives after its window has been evaluated cannot change it.
-The reference models arrival with a watermark per Kafka partition in file order; it assigns
-symbols to partitions with Kafka's own hash function, which reproduces the measured partition
-sizes exactly. We compare every window that the job's final watermark has closed.
+The reference implementation reads the CSV directly, so it shares no code, serialization or
+ordering with Kafka and Flink, and computes both queries under two semantics. *Batch semantics*
+accept every event. *Streaming semantics* follow the specification: a window is evaluated once
+the next window starts, so a later event cannot change it. The reference models arrival with a
+watermark per Kafka partition in file order, using Kafka's hash function to assign symbols, which
+reproduces the measured partition sizes exactly.
 
-On the Monday slice no event is more than 5 seconds out of order within its partition
-(#monday.late_upper_bound such events), so both variants coincide, and the job's output is
-identical to them at every parallelism:
+On the Monday slice no event is more than 5 seconds out of order within its partition, so both
+semantics coincide, and the job's output is identical to them at every parallelism:
 #{
   let mains = monday.comparisons.filter(c => c.semantics == "streaming" and c.label.starts-with("tuned"))
   [#mains.map(c => c.label.split("-p").last()).join(", ", last: " and ")]
@@ -260,7 +227,7 @@ identical to them at every parallelism:
     align: (left, right, right, right, right),
     stroke: none,
     table.hline(),
-    table.header([], [Reference], [No fix\ $p = 4$], [Fixed\ $p = 4$], [Fixed\ $p = 8$]),
+    table.header([], [Reference], [No fix\ $p = 4$], [Final\ $p = 4$], [Final\ $p = 8$]),
     table.hline(stroke: 0.5pt),
     [Late events], [#correctness.late_upper_bound], [#mev(late-of("weekprefix", 4), digits: 1)],
       [#num(late-of("weektuned", 4))], [#num(late-of("weektuned", 8))],
@@ -275,80 +242,46 @@ identical to them at every parallelism:
     table.hline(),
   ),
   caption: [The week of price events compared with the streaming reference. "No fix" assigns
-    watermarks after the source; "Fixed" is the final job. The reference column counts the
-    events late within their partition.],
+    watermarks after the source. The reference column counts the events late within their
+    partition.],
 ) <tab-correct>
+#if not (identical(fixed4) and identical(fixed8)) [*(Warning: a week comparison differs.)*]
 
-*Watermarks per partition.* The first version failed badly. It dropped
+*Watermarks per partition.* An earlier version dropped
 #pct(at(prefix-runs, 1).late_dropped / at(prefix-runs, 1).price_events, digits: 0) of the
 Monday price events as late at parallelism 1 and
 #pct(at(prefix-runs, 4).late_dropped / at(prefix-runs, 4).price_events, digits: 0) at
-parallelism 4, although none of them is late within its partition. The cause was where
-watermarks were generated. The job attached its watermark strategy after the Kafka source, so
-each source subtask tracked one watermark over all of its partitions. The Kafka consumer returns
-records in batches per partition, so a batch from a partition that is ahead in event time pushes
-the watermark past events that the other partitions have not delivered yet, and the window
-operator discards them. How far partitions drift apart depends on how many each subtask reads,
-which made the losses depend on parallelism. Moving the strategy into the source makes Kafka
-track a watermark per partition and forward their minimum, so a partition that is ahead can no
-longer overtake one that is behind.
+parallelism 4, although none is late within its partition. It generated watermarks after the
+Kafka source, one per subtask over all its partitions. The consumer returns records in batches
+per partition, so a batch from a partition ahead in event time pushed the watermark past events
+that other partitions had not delivered yet, and how far they drifted apart depended on the
+parallelism. Generating watermarks in the source tracks one per partition.
 
-*Watermark alignment.* The week contains one anomalous batch: on Wednesday at 18:56,
-#correctness.late_upper_bound index events were republished with a trading time of 01:00 and no
-trading date, which places them 18 hours in the past. Under streaming semantics they must be
-dropped, because their windows were evaluated long before. Without alignment the job dropped
-only #unaligned.runs.map(r => num(r.late_dropped)).join(" and ") of them at parallelism
-#unaligned.runs.map(r => str(r.parallelism)).join(" and "). The subtasks read the backlog at
-different speeds in event time, so the window operator's watermark, the minimum over all
-subtasks, sometimes lagged hours behind and let some of the batch in. Because each EMA feeds
-the next, every accepted event shifted all later EMAs of its symbol: results differed in
+*Watermark alignment.* On Wednesday at 18:56, #correctness.late_upper_bound index events were
+republished with a trading time of 01:00 and no trading date, 18 hours in the past. Streaming
+semantics must drop them. Without alignment the job dropped only
+#unaligned.runs.map(r => num(r.late_dropped)).join(" and ") of them at parallelism
+#unaligned.runs.map(r => str(r.parallelism)).join(" and "): subtasks read the backlog at
+different speeds, so the window operator's watermark sometimes lagged hours behind and let part
+of the batch in. Each accepted event shifted all later EMAs of its symbol, so results differed in
 #unaligned.runs.map(r => str(r.symbols_different)).join(" and ") symbols and
-#unaligned.runs.map(r => str(r.crossovers_different)).join(" and ") advisories, with different
-results at each parallelism. Watermark alignment pauses partitions that run more than a minute
-ahead, which bounds that lag. With it the job drops exactly the events the reference predicts,
-and its output is identical to the streaming reference at both parallelisms. Alignment changes
-throughput in both directions (@tab-align): at parallelism 1, one subtask reads all 8 partitions
-and has to keep them in step, which costs
-#pct(1 - base-tp(1) / at(unaligned-tp, 1).throughput_mean, digits: 0); at higher parallelism, each
-subtask reads fewer partitions and the steadier watermark lets windows fire evenly.
+#unaligned.runs.map(r => str(r.crossovers_different)).join(" and ") advisories, differently at
+each parallelism. Alignment bounds that lag, and with it the job drops exactly the events the
+reference predicts. Measured on the first version of the job, it costs
+#pct(1 - base-tp(1) / at(unaligned-tp, 1).throughput_mean, digits: 0) of throughput at
+parallelism 1, where one subtask must keep all 8 partitions in step, and gains
+#pct(base-tp(pmax) / at(unaligned-tp, pmax).throughput_mean - 1, digits: 0) at parallelism
+#pmax, where the steadier watermark lets windows fire evenly.
 
-#figure(
-  table(
-    columns: (auto, 1fr, 1fr, auto),
-    align: (left, right, right, right),
-    stroke: none,
-    table.hline(),
-    table.header([$p$], [Without alignment], [With alignment], [Change]),
-    table.hline(stroke: 0.5pt),
-    ..base-runs.map(r => (
-      [#r.parallelism],
-      [#kev(at(unaligned-tp, r.parallelism).throughput_mean) events/s],
-      [#kev(r.throughput_mean) events/s],
-      [#{
-        let d = r.throughput_mean / at(unaligned-tp, r.parallelism).throughput_mean - 1
-        if d >= 0 { "+" } else { sym.minus } + pct(calc.abs(d), digits: 0)
-      }],
-    )).flatten(),
-    table.hline(),
-  ),
-  caption: [Mean throughput of the first version of the job on the Monday slice with and without
-    watermark alignment.],
-) <tab-align>
-#if not (identical(fixed4) and identical(fixed8)) [*(Warning: a week comparison differs.)*]
-
-Batch semantics would put the republished events back into Wednesday's 01:00 windows. That
-changes the later EMAs of #correctness.late_symbols symbols, so
-#num(cmp(correctness, "week-p4", semantics: "batch").ema_rows_different) windows differ from
-the job's output. A stream processor can only reach that result by retracting windows it has
-already emitted, which the specification rules out. @fig-ema shows the results for the
-symbols with the most advisories.
+Batch semantics would put the republished events back into their windows and change
+#num(cmp(correctness, "weektuned-p4", semantics: "batch").ema_rows_different) later windows of
+#correctness.late_symbols symbols, a result a stream processor can only reach by retracting
+emitted windows. @fig-ema shows the output for the symbols with the most advisories.
 
 #figure(
   image("figures/ema.svg", width: 100%),
   caption: [Close price, EMA-38 and EMA-100 per window over the week, with the advisories Query 2
     emitted, for the frequently traded symbols with the most crossovers. Both EMAs start from zero.],
-  placement: top,
-  scope: "parent",
 ) <fig-ema>
 
 == Removing Bottlenecks <sec-opt>
@@ -372,36 +305,26 @@ symbols with the most advisories.
   caption: [Mean throughput on the 20M-event slice before and after removing the bottlenecks.],
 ) <tab-opt>
 
-The first version of the job read only #kev(base-tp(1)) events/s at $p = 1$ (@tab-opt). Flink's
-task metrics located the bottleneck: at every parallelism, the task holding the windows and the
-EMA sink was busy
+The first version read #kev(base-tp(1)) events/s at $p = 1$ (@tab-opt). The task holding the
+windows and the EMA sink was busy
 #pct(calc.min(..base-runs.map(r => r.busy.TumblingEventTimeWindows)), digits: 0) to
-#pct(calc.max(..base-runs.map(r => r.busy.TumblingEventTimeWindows)), digits: 0) of the time,
-while the source was backpressured #pct(at(base-runs, 1).backpressured.Source, digits: 0) of
-the time at $p = 1$. Busy time includes waiting on synchronous calls, and the sink wrote every
-result as its own upsert and transaction, so the task mostly waited on database round trips:
-it wrote #num(at(base-runs, 1).rows_per_s) rows/s. The sink now commits its upserts as one batch
-when 1000 are queued, when a watermark passes, which happens right after windows fire, so the
-terminal stays current, and on every checkpoint, so a failure loses nothing that the replay does
-not rewrite. Batching alone raised $p = 1$ to #kev(batched-tp) events/s in a single run.
+#pct(calc.max(..base-runs.map(r => r.busy.TumblingEventTimeWindows)), digits: 0) of the time
+at every parallelism, while the source was backpressured
+#pct(at(base-runs, 1).backpressured.Source, digits: 0) of the time at $p = 1$. Busy time
+includes waiting on synchronous calls, and the sink committed every result in its own
+transaction, so the task mostly waited on database round trips and wrote only
+#num(at(base-runs, 1).rows_per_s) rows/s. Batching the commits alone raised $p = 1$ to
+#kev(batched-tp) events/s in a single run.
 
 The source then became the busiest task
 (#pct(at(runs("batched"), 1).busy.Source, digits: 0) busy). A microbenchmark of its per-event
-work found two costs of similar size: parsing the JSON of every event, although only one in
-five is a price event, and converting the time of each price event, which the job did three
-times, in the filter and twice in the timestamp assigner. Because the producer omits empty
-fields, the deserializer now skips events without a `"last"` key before parsing them and drops
-unusable price events itself, so each time is parsed once. This roughly halved the source's
-cost per event and brought $p = 1$ to #kev(slice-tp(1)) events/s, with output still identical
-to the reference.
+work found two costs of similar size: parsing the JSON of every event, although most carry no
+price, and converting the time of each price event, which the job did three times.
+Skipping non-price events before parsing and parsing each time once roughly halved the cost per
+event and brought $p = 1$ to #kev(slice-tp(1)) events/s, with output still identical to the
+reference.
 
 == Scalability
-
-#figure(
-  image("figures/throughput.svg", width: 100%),
-  caption: [Mean throughput on all of Monday over #at(main-runs, 1).runs runs, with the range as
-    error bars.],
-) <fig-throughput>
 
 #figure(
   table(
@@ -420,77 +343,123 @@ to the reference.
     )).flatten(),
     table.hline(),
   ),
-  caption: [Throughput (mean #sym.plus.minus standard deviation), speedup over $p = 1$, EMA rows written per
-    second, and events read by the busiest source subtask relative to the mean.],
+  caption: [Throughput on all of Monday over #at(main-runs, 1).runs runs (mean #sym.plus.minus
+    standard deviation), speedup over $p = 1$, EMA rows written per second, and events read by
+    the busiest source subtask relative to the mean.],
 ) <tab-scale>
-
-#figure(
-  image("figures/cpu.svg", width: 100%),
-  caption: [Mean CPU use per container while the job reads its input. The VM has 8 cores.],
-) <fig-cpu>
-
-@fig-throughput and @tab-scale show the final job on all of Monday. Throughput grows from
-#kev(tp(1)) events/s at $p = 1$ to #kev(tp(4)) at $p = 4$
-(#num(tp(4) / tp(1), digits: 2)#sym.times) and no further at $p = #pmax$, where it also varies
-most between runs. No task is saturated (@fig-busy): the source is busy
-#pct(at(main-runs, pmax).busy.Source, digits: 0) and the window task
-#pct(at(main-runs, pmax).busy.TumblingEventTimeWindows, digits: 0) of the time at
-$p = #pmax$, the source is backpressured only
-#pct(at(main-runs, pmax).backpressured.Source, digits: 0), and the containers use
-#num(at(main-runs, pmax).cpu_total, digits: 1) of the 8 cores (@fig-cpu). The sources are
-mostly idle instead, for three reasons we did not separate. First, watermark alignment pauses a
-partition that runs more than a minute ahead of the slowest one, and since the job reads a whole
-trading day in under a minute, small differences in reading speed trigger it: partitions are
-paused #pct(at(main-runs, pmax).paused, digits: 0) of the time at $p = #pmax$, where each
-subtask has only one partition to read. Second, with symbols as keys the partitions are uneven,
-and the busiest subtask reads #num(at(main-runs, pmax).skew, digits: 2)#sym.times the mean,
-which alone caps the speedup at #num(pmax / at(main-runs, pmax).skew, digits: 1)#sym.times.
-Third, the M1 has four performance and four efficiency cores, so beyond four busy subtasks some
-run on slower cores, and the watermark makes the job wait for the slowest subtask.
 
 #figure(
   image("figures/busy.svg", width: 100%),
   caption: [Share of time each task is busy or backpressured, averaged over its subtasks.],
 ) <fig-busy>
 
+At $p = 1$ the job reads #kev(tp(1)) events/s, #num(tp(1) / mon.peak_events_per_s) times
+Monday's peak rate. With more subtasks it grows to #kev(tp(4)) events/s at $p = 4$
+(#num(tp(4) / tp(1), digits: 2)#sym.times) and no further at $p = #pmax$, where it also
+varies most between runs (@tab-scale). No task is saturated at $p = #pmax$
+(@fig-busy): the source is busy #pct(at(main-runs, pmax).busy.Source, digits: 0) and the window
+task #pct(at(main-runs, pmax).busy.TumblingEventTimeWindows, digits: 0) of the time, the source
+is backpressured only #pct(at(main-runs, pmax).backpressured.Source, digits: 0), and the
+containers use #num(at(main-runs, pmax).cpu_total, digits: 1) of the 8 cores (@fig-cpu). The
+sources are mostly idle, for three reasons we did not separate. Since the job reads a whole
+trading day in under a minute, small differences in reading speed trigger watermark alignment:
+partitions are paused #pct(at(main-runs, pmax).paused, digits: 0) of the time at $p = #pmax$,
+where each subtask has only one partition to read. The long tail of symbols makes partitions
+uneven: the busiest subtask reads #num(at(main-runs, pmax).skew, digits: 2)#sym.times the mean,
+which alone caps the speedup at #num(pmax / at(main-runs, pmax).skew, digits: 1)#sym.times.
+Beyond four busy subtasks, some run on the M1's slower efficiency cores, and the watermark makes
+the job wait for the slowest subtask.
+
+== Latency
+
+#figure(
+  table(
+    columns: (auto, auto, 1fr, 1fr, 1fr),
+    align: (left, right, right, right, right),
+    stroke: none,
+    table.hline(),
+    table.header([Target], [Achieved], [Median], [p99], [Max]),
+    table.hline(stroke: 0.5pt),
+    ..latency.map(r => (
+      [#kev(r.rate)/s],
+      [#kev(r.achieved_rate)/s],
+      [#num(r.window_latency_ms.p50) ms],
+      [#num(r.window_latency_ms.p99) ms],
+      [#num(r.window_latency_ms.max) ms],
+    )).flatten(),
+    table.hline(),
+  ),
+  caption: [Time from when a window can be evaluated until all its EMA rows are committed, at
+    $p = #latency.first().parallelism$ under a steady input rate.],
+) <tab-latency>
+
+#let lat-steady = latency.slice(1)
+#let lat-low = latency.first()
+@tab-latency measures, for each window, the time from when it can first be evaluated (the
+producer sends the first price event of the next window) until its last EMA row is committed.
+This covers the out-of-orderness bound, the wait for the slowest partition, processing and the
+batched commit; the database and host clocks agree to within
+#num(calc.max(..latency.map(r => r.clock.round_trip_ms)) / 2) ms. From
+#kev(lat-steady.first().rate) to #kev(lat-steady.last().achieved_rate) events/s the median
+stays at or below #num(calc.max(..lat-steady.map(r => r.window_latency_ms.p50))) ms and p99 at
+or below #num(calc.max(..lat-steady.map(r => r.window_latency_ms.p99))) ms, and the
+producer, which shares the machine, cannot send faster. The lowest rate, run on the first
+#mev(lat-low.events, digits: 0) events, has the highest tail
+(#num(lat-low.window_latency_ms.p99) ms at p99): event time advances slowly in wall-clock time,
+so the out-of-orderness bound and sparse partitions hold the watermark back longer. At the
+data's real rates, event-time progress rather than load sets the latency. Advisories were not
+measured separately; the crossover detector consumes the EMA stream and commits each advisory
+on its own, so they trail their EMA rows by one operator and one insert.
+
 == Resource Utilization
 
-@fig-cpu splits the CPU use by container. At $p = #pmax$ the TaskManagers use
-#num(at(main-runs, pmax).cpu.taskmanagers, digits: 1) cores, TimescaleDB
-#num(at(main-runs, pmax).cpu.timescaledb, digits: 1), Kafka
-#num(at(main-runs, pmax).cpu.kafka, digits: 2) and the JobManager
-#num(at(main-runs, pmax).cpu.jobmanager, digits: 2). Kafka is nearly idle because it serves the
-preloaded, compressed batches from the page cache without decoding them. TimescaleDB's share
-grows with the rate of upserts. Even at $p = #pmax$,
-#pct(1 - at(main-runs, pmax).cpu_total / 8, digits: 0) of the VM's CPU capacity is idle.
+#figure(
+  image("figures/cpu.svg", width: 100%),
+  caption: [Mean CPU use per container while the job reads its input. The VM has 8 cores.],
+) <fig-cpu>
 
-Memory and state size mattered more than CPU, and two problems only appeared on long runs.
-First, the original window buffered every event of an open window, and with per-partition
-watermarks a window stays open until the slowest partition passes its end, so the 1 GB
-TaskManagers ran out of heap. Pre-reducing each window to its latest event bounds the state by
-the number of symbols times open windows. Flink also reserved 40% of TaskManager memory as
-managed memory, which the heap-based state backend never uses; lowering that share to 10%
-doubled the heap to about 340 MB. Second, without configured checkpoint storage Flink keeps
-checkpoints in JobManager memory, capped at 5 MB per task. At parallelism 1 the state of all
-symbols outgrew that after about two days of data, every checkpoint failed, and the job kept
-restarting from its last good checkpoint without making progress. Checkpoints now go to a
-volume shared by the JobManager and all TaskManagers.
+At $p = #pmax$ the TaskManagers use #num(at(main-runs, pmax).cpu.taskmanagers, digits: 1)
+cores, TimescaleDB #num(at(main-runs, pmax).cpu.timescaledb, digits: 1), Kafka
+#num(at(main-runs, pmax).cpu.kafka, digits: 2) and the JobManager
+#num(at(main-runs, pmax).cpu.jobmanager, digits: 2) (@fig-cpu). Kafka serves the preloaded,
+compressed batches from the page cache without decoding them, and TimescaleDB's share grows
+with the rate of upserts. The GPU is unused.
+
+Memory, not CPU, caused the two problems that appeared only on long runs. The original window
+buffered every event until the slowest partition passed its end, and the 1 GB
+TaskManagers ran out of heap; pre-reducing windows bounds the state by symbols times open
+windows, and lowering Flink's unused managed memory share from 40% to 10% doubled the heap to
+about 340 MB. Flink's default checkpoint storage in JobManager memory is capped at 5 MB per task,
+which the state of all symbols outgrew after two days of data at parallelism 1, so the job kept
+restarting until checkpoints moved to the shared volume.
 #if main-runs.all(r => r.restarts == 0) [None of the scalability runs restarted.]
 
 = Conclusion
 
-The system computes both queries for all symbols and delivers advisories to a terminal that shows
-them in context. Its results match an independent reference exactly at every parallelism we tested, and on
-one laptop it processes #kev(tp(1)) to #kev(tp-max) events/s depending on parallelism. The
-most valuable part of the evaluation was the reference comparison: the first version looked
-plausible on the dashboard while discarding most of its input, and a later version still gave
-slightly different results at each parallelism. Only independently computed results revealed
-either. The task metrics were as useful for performance: they traced the first version's
-throughput to one database transaction per result, and removing that and the source's
-redundant parsing raised throughput #num(slice-tp(1) / base-tp(1), digits: 0)-fold at
-parallelism 1. Beyond four subtasks the job stops scaling on
-this laptop. More Kafka partitions than subtasks would smooth the skew of symbol keys, and
-identical cores would show how much of the limit is watermark alignment and how much the
-hardware.
+#todo[Conclusion (team).]
+
+*Future work.* Beyond four subtasks the job stops scaling on this laptop although no task is
+saturated. More Kafka partitions than subtasks would even out the skewed symbol keys, and a
+cluster of identical cores would show how much of the limit is watermark alignment and how much
+the hardware. The latency measurement stopped at the producer's rate; producing from several
+processes would show latency near the job's capacity. Inside each batch the EMA sink still sends
+one statement per row, and multi-row inserts or PostgreSQL's `COPY` would cut TimescaleDB's
+CPU share, which grows with the result rate.
+
+= Individual Contributions
+
+From the Git history: Joona built the producer, the Flink metrics and cAdvisor setup, the
+benchmark and reference implementation, the watermark and checkpoint fixes and the performance
+optimizations. Aleksi set up Kafka and Flink in Docker Compose and built the EMA job, Query 2
+and its persistence, automatic job submission and the trading terminal. Axel built the first
+web frontend, the SQL schema and the Prometheus and Grafana setup. Each member answers three
+questions: the most important design decisions, the most challenging parts, and their own
+contribution and how the team worked.
+
+*Joona Kärkkäinen.* #todo[Joona's answers.]
+
+*Aleksi Kuusinen.* #todo[Aleksi's answers.]
+
+*Axel Andersson.* #todo[Axel's answers.]
 
 #bibliography("refs.bib")

@@ -92,28 +92,6 @@ def save(fig, name):
     plt.close(fig)
 
 
-def throughput_figure(groups):
-    ps = list(groups)
-    mean = [statistics.fmean(s["throughput"] for s in groups[p]) / 1e3 for p in ps]
-    lo = [m - min(s["throughput"] for s in groups[p]) / 1e3 for p, m in zip(ps, mean)]
-    hi = [max(s["throughput"] for s in groups[p]) / 1e3 - m for p, m in zip(ps, mean)]
-    fig, ax = plt.subplots(figsize=(3.3, 2.1))
-    ax.plot(ps, [mean[0] * p for p in ps], color=MUTED, linestyle=(0, (3, 3)), linewidth=1,
-            label="Linear from parallelism 1")
-    ax.errorbar(ps, mean, yerr=[lo, hi], color=SERIES[0], marker="o", markersize=5, capsize=3,
-                markeredgecolor=SURFACE, markeredgewidth=1, label="Measured (mean, range)")
-    ax.legend(loc="upper left", fontsize=7)
-    for p, m in zip(ps, mean):
-        ax.annotate(f"{m:.0f}k", (p, m), textcoords="offset points", xytext=(6, -10), color=INK, fontsize=7)
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(ps, [str(p) for p in ps])
-    # The linear line leaves the plot past p = 2; scaling to it would flatten the measurements
-    ax.set_ylim(0, max(m + h for m, h in zip(mean, hi)) * 1.5)
-    ax.set_xlabel("Flink parallelism (TaskManagers = parallelism / 2)")
-    ax.set_ylabel("Events/s (thousands)")
-    save(fig, "throughput")
-
-
 def cpu_figure(groups):
     ps = list(groups)
     fig, ax = plt.subplots(figsize=(3.3, 2.1))
@@ -157,7 +135,7 @@ def busy_figure(groups):
 def ema_figure(examples):
     zone = ZoneInfo("Europe/Paris")
     symbols = list(examples)
-    fig, axes = plt.subplots(len(symbols), 1, figsize=(7, 1.6 * len(symbols)), sharex=True)
+    fig, axes = plt.subplots(len(symbols), 1, figsize=(3.3, 1.15 * len(symbols)), sharex=True)
     for ax, symbol in zip(axes, symbols):
         rows = examples[symbol]["emas"]
         times = [datetime.fromtimestamp(r[0], zone).replace(tzinfo=None) for r in rows]
@@ -168,16 +146,17 @@ def ema_figure(examples):
         for kind, marker, color in [("BUY", "^", SERIES[2]), ("SELL", "v", SERIES[3])]:
             xs = [t for t, k in examples[symbol]["crossovers"] if k == kind]
             ax.scatter([datetime.fromtimestamp(t, zone).replace(tzinfo=None) for t in xs],
-                       [prices[t] for t in xs], marker=marker, s=40, color=color, edgecolor=SURFACE,
+                       [prices[t] for t in xs], marker=marker, s=22, color=color, edgecolor=SURFACE,
                        linewidth=1, zorder=3, label=f"{kind} advisory")
         # Skip the warm-up where both EMAs climb from zero; it would flatten the interesting part
         settled = [r[1] for r in rows[len(rows) // 3:]] + [r[2] for r in rows[len(rows) // 3:]]
         pad = (max(settled) - min(settled)) * 0.3
         ax.set_ylim(min(settled) - pad, max(settled) + pad)
         ax.set_ylabel(symbol)
-    axes[0].legend(loc="upper left", ncols=5, fontsize=7, bbox_to_anchor=(0, 1.35))
+    axes[0].legend(loc="lower left", ncols=3, fontsize=6.5, bbox_to_anchor=(0, 1.02), handlelength=1.2,
+                   columnspacing=0.8)
     axes[-1].xaxis.set_major_locator(matplotlib.dates.DayLocator())
-    axes[-1].xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%a %d"))
+    axes[-1].xaxis.set_major_formatter(matplotlib.dates.DateFormatter("%a"))
     first, last = (datetime.fromtimestamp(examples[symbols[0]]["emas"][i][0], zone) for i in (0, -1))
     axes[-1].set_xlabel(f"Window end (CET), {first:%d} to {last:%d %B %Y}")
     save(fig, "ema")
@@ -214,7 +193,6 @@ def main():
     # Scalability of the final job on all of Monday; "main" and "tuned" compare jobs on a 20M slice
     main_runs = [r for r in runs if r["label"] == "day"]
     groups = by_parallelism(summarize(r) for r in main_runs)
-    throughput_figure(groups)
     cpu_figure(groups)
     busy_figure(groups)
     labels = sorted({r["label"] for r in runs})
