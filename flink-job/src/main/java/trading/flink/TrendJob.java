@@ -55,22 +55,29 @@ public final class TrendJob {
         // Event-time processing: timestamps are extracted from price events only.
         // We allow up to 5 seconds of out-of-orderness to handle late arrivals,
         // and mark partitions idle if no events arrive for 1 minute.
+        // The strategy is applied in the source so every Kafka partition gets its own
+        // watermark: a subtask reads its partitions interleaved, and one shared
+        // watermark would run ahead of the slower partitions and drop their events as late.
+        // Alignment pauses partitions more than a minute ahead of the slowest one, so subtasks
+        // reading a backlog at different speeds cannot let the downstream watermark lag hours
+        // behind and accept some late events but not others.
         WatermarkStrategy<TickEvent> watermarks = WatermarkStrategy
                 .<TickEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
-                .withTimestampAssigner((event, recordTimestamp) -> extractEpochMillis(event))
-                .withIdleness(Duration.ofMinutes(1));
+                .withTimestampAssigner((event, recordTimestamp) ->
+                        isUsablePriceEvent(event) ? extractEpochMillis(event) : Long.MIN_VALUE)
+                .withIdleness(Duration.ofMinutes(1))
+                .withWatermarkAlignment("ticks", Duration.ofMinutes(1), Duration.ofSeconds(1));
 
         // ── Ingest and Filter ─────────────────────────────────────────────────
         // Drop any non-price events and any events without a valid timestamp immediately,
         // so watermarks and windows are only computed over legitimate price observations.
-        DataStream<EmaResult> emas = env.fromSource(
-                        source, WatermarkStrategy.noWatermarks(), "kafka-ticks")
+        DataStream<EmaResult> emas = env.fromSource(source, watermarks, "kafka-ticks")
                 .filter(TrendJob::isUsablePriceEvent)
-                .assignTimestampsAndWatermarks(watermarks)
                 .keyBy(TickEvent::id)                    // group by symbol
                 .window(TumblingEventTimeWindows.of(
                         Duration.ofMinutes(5)))          // 5-minute tumbling windows
-                .process(new EmaWindowFunction());
+                // Keep only the latest event per window so state stays one event per symbol
+                .reduce(EmaWindowFunction::later, new EmaWindowFunction());
 
         emas.sinkTo(new EmaJdbcSink()).name("timescaledb-ema-results");
 

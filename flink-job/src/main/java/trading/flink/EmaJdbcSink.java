@@ -17,6 +17,7 @@ public final class EmaJdbcSink implements Sink<EmaResult> {
 
     @Override
     public SinkWriter<EmaResult> createWriter(WriterInitContext context) throws IOException {
+        PostgresDriver.load(context);
         return new EmaJdbcWriter();
     }
 

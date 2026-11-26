@@ -17,6 +17,7 @@ public final class CrossoverJdbcSink implements Sink<CrossoverEvent> {
 
     @Override
     public SinkWriter<CrossoverEvent> createWriter(WriterInitContext context) throws IOException {
+        PostgresDriver.load(context);
         return new CrossoverJdbcWriter();
     }
 
