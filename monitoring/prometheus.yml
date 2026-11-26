@@ -8,12 +8,15 @@ scrape_configs:
     static_configs:
       - targets: [web:7070]
 
+  # Flink is scraped every second so short benchmark runs are timed to +-1 s
   - job_name: flink-jobmanager
+    scrape_interval: 1s
     static_configs:
       - targets: [jobmanager:9249]
 
   # Resolves every replica of the scalable taskmanager service
   - job_name: flink-taskmanager
+    scrape_interval: 1s
     dns_sd_configs:
       - names: [taskmanager]
         type: A

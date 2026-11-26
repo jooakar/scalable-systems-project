@@ -55,7 +55,7 @@ def prom(query, at=None):
     return http(f"{PROM}/api/v1/query?{urllib.parse.urlencode(params)}")["data"]["result"]
 
 
-def prom_range(query, start, end, step=5):
+def prom_range(query, start, end, step=1):
     params = {"query": query, "start": start, "end": end, "step": step}
     result = http(f"{PROM}/api/v1/query_range?{urllib.parse.urlencode(params)}")["data"]["result"]
     return {json.dumps(r["metric"], sort_keys=True): [(float(t), float(v)) for t, v in r["values"]]
@@ -145,7 +145,8 @@ def run_once(jar_id, parallelism, events):
     jid = submit(jar_id, parallelism)
     t_running = time.time()
     job = f'job_id="{jid}"'
-    read = f"sum(flink_taskmanager_job_task_operator_numRecordsOut{{{SOURCE},{job}}})"
+    # Records the Kafka consumer fetched, including those the deserializer then skips
+    read = f"sum(flink_taskmanager_job_task_operator_KafkaSourceReader_KafkaConsumer_records_consumed_total{{{SOURCE},{job}}})"
     wait_for(lambda: scalar(read) >= events, 3600, interval=2, what="source to read all events")
     t_read = time.time()
 
@@ -166,7 +167,7 @@ def run_once(jar_id, parallelism, events):
     series = {
         "records_read": prom_range(read, start, end),
         "read_rate": prom_range(
-            f"sum(rate(flink_taskmanager_job_task_operator_numRecordsOut{{{SOURCE},{job}}}[15s]))", start, end),
+            f"sum(rate(flink_taskmanager_job_task_operator_KafkaSourceReader_KafkaConsumer_records_consumed_total{{{SOURCE},{job}}}[15s]))", start, end),
         "rows_written_rate": prom_range(
             f'sum(rate(flink_taskmanager_job_task_operator_numRecordsIn{{operator_name=~"timescaledb_ema_results.*",{job}}}[15s]))',
             start, end),
@@ -183,10 +184,12 @@ def run_once(jar_id, parallelism, events):
     }
     # Events read per source subtask, i.e. per Kafka partition group, to quantify skew
     per_subtask = [float(r["value"][1]) for r in prom(
-        f"flink_taskmanager_job_task_operator_numRecordsOut{{{SOURCE},{job}}}", t_read)]
+        f"flink_taskmanager_job_task_operator_KafkaSourceReader_KafkaConsumer_records_consumed_total{{{SOURCE},{job}}}", t_read)]
     restarts = scalar(f"flink_jobmanager_job_numRestarts{{{job}}}")
     late = scalar(f"sum(flink_taskmanager_job_task_operator_numLateRecordsDropped{{{job}}})")
-    price = scalar(f'sum(flink_taskmanager_job_task_operator_numRecordsOut{{operator_name="Filter",{job}}})')
+    # Jobs that filter after the source count price events at the Filter; the final job's source emits only them
+    price = scalar(f'sum(flink_taskmanager_job_task_operator_numRecordsOut{{operator_name="Filter",{job}}}) '
+                   f'or sum(flink_taskmanager_job_task_operator_numRecordsOut{{{SOURCE},{job}}})')
     return {
         "parallelism": parallelism, "taskmanagers": math.ceil(parallelism / SLOTS_PER_TM), "job_id": jid,
         "events": events, "t_submit": t_submit, "t_running": t_running, "t_read": t_read,
