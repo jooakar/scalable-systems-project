@@ -80,6 +80,7 @@ Arguments are CSV files or directories (a directory's files are replayed in name
 | `TOPIC`             | `ticks`          | Target topic (created if missing) |
 | `PARTITIONS`        | `4`              | Partitions when creating topic    |
 | `RATE`              | `0`              | Max events/s, `0` = unlimited     |
+| `WINDOW_LOG`        | unset            | File to log when each window opened, for latency measurements |
 
 ## Web Terminal
 
@@ -151,10 +152,13 @@ python3 bench/reference.py data/bench-20000000.csv tuned-p1 tuned-p2 tuned-p4 tu
 for f in data/debs2022-gc-trading-day-*.csv; do LC_ALL=C awk -F, '$22!="" && $1!~/^#/ && $1!="ID"' "$f"; done > data/week-prices.csv
 python3 bench/benchmark.py --input data/week-prices.csv --parallelism 4 8 --reps 1 --dump --label weektuned
 python3 bench/reference.py data/week-prices.csv weektuned-p4 weektuned-p8 week-p4 week-p8 weekprefix-p4
+# Latency under steady input rates, and the workload description
+python3 bench/latency.py --parallelism 4
+python3 bench/dataset.py data/debs2022-gc-trading-day-08-11-21.csv data/week-prices.csv
 python3 bench/plot.py
 typst compile --font-path report/fonts report/main.typ
 ```
 
-`benchmark.py` preloads Kafka (8 partitions), then for each parallelism scales the TaskManagers to `parallelism / 2`, runs the job from the earliest offset until it has read every event and drained its sinks, and saves the Flink and cAdvisor series from Prometheus to `report/results/runs/`. `--dump` exports the first run per parallelism from TimescaleDB to `data/results/`. `reference.py` recomputes both queries single-threaded straight from the CSV, under batch and streaming semantics, and compares them with those exports. `plot.py` writes the figures to `report/figures/` and the summary the report reads to `report/results/summary.json`.
+`benchmark.py` preloads Kafka (8 partitions), then for each parallelism scales the TaskManagers to `parallelism / 2`, runs the job from the earliest offset until it has read every event and drained its sinks, and saves the Flink and cAdvisor series from Prometheus to `report/results/runs/`. `--dump` exports the first run per parallelism from TimescaleDB to `data/results/`. `reference.py` recomputes both queries single-threaded straight from the CSV, under batch and streaming semantics, and compares them with those exports. `latency.py` starts the job on an empty topic, replays at fixed rates with the producer's `RATE` and `WINDOW_LOG` settings, and measures how long each window takes from the first price event of the next window to its committed EMA rows. `dataset.py` counts events per exchange, security type, second and symbol. `plot.py` writes the figures to `report/figures/` and the summary the report reads to `report/results/summary.json`.
 
 The report's baseline (`main`, `week`) is the job before batching the EMA sink and filtering in the deserializer (commit `6cd7ba4`), and `batched` is that job with only the sink batched; build those jars and pass them with `--jar` and `--label`. The "no fix" control is the same job with the watermark strategy applied after the Kafka source instead of in it; build that variant and pass its jar with `--jar` and `--label prefix` (Monday) or `--label weekprefix` (week).
