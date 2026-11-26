@@ -19,9 +19,23 @@ services:
       KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qo
     restart: always
 
+  # Checkpoints must be readable by the JobManager and every TaskManager, so they share a
+  # volume; Flink runs as uid 9999 and a fresh volume is owned by root
+  flink-checkpoints-init:
+    image: busybox:1.37.0
+    command: chown 9999:9999 /checkpoints
+    volumes:
+      - flink-checkpoints:/checkpoints
+    restart: "no"
+
   jobmanager:
     image: flink:2.3.0-java21
     container_name: flink-jobmanager
+    depends_on:
+      flink-checkpoints-init:
+        condition: service_completed_successfully
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
     ports:
       - "8081:8081"
     command: jobmanager
@@ -29,19 +43,31 @@ services:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
+        execution.checkpointing.storage: filesystem
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
     restart: always
 
   taskmanager:
     image: flink:2.3.0-java21
-    container_name: flink-taskmanager
     depends_on:
       - jobmanager
     command: taskmanager
+    volumes:
+      - flink-checkpoints:/opt/flink/checkpoints
     environment:
       - |
         FLINK_PROPERTIES=
         jobmanager.rpc.address: jobmanager
         taskmanager.numberOfTaskSlots: 2
+        taskmanager.memory.process.size: 1024m
+        # The HashMap state backend keeps state on the heap and needs no managed memory
+        taskmanager.memory.managed.fraction: 0.1
+        metrics.reporter.prom.factory.class: org.apache.flink.metrics.prometheus.PrometheusReporterFactory
+        metrics.reporter.prom.port: 9249
+        execution.checkpointing.storage: filesystem
+        execution.checkpointing.dir: file:///opt/flink/checkpoints
     restart: always
 
   timescaledb:
@@ -96,13 +122,31 @@ services:
         condition: service_healthy
     environment:
       JOBMANAGER_URL: http://jobmanager:8081
+      PARALLELISM: ${PARALLELISM:-1}
     restart: "no"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: cadvisor
+    privileged: true
+    devices:
+      - /dev/kmsg
+    ports:
+      - "8080:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: always
 
   prometheus:
     image: prom/prometheus:v3.8.0
     container_name: prometheus
     depends_on:
       - web
+      - cadvisor
     ports:
       - "9090:9090"
     volumes:
@@ -127,5 +171,6 @@ services:
     restart: always
 
 volumes:
+  flink-checkpoints:
   timescaledb-data:
   grafana-data:
