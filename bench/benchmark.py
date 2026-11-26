@@ -173,6 +173,9 @@ def run_once(jar_id, parallelism, events):
             start, end),
         "busy_ms_per_s": prom_range(
             f"avg by (task_name) (flink_taskmanager_job_task_busyTimeMsPerSecond{{{job}}})", start, end),
+        # Time Kafka partitions are paused by watermark alignment
+        "paused_ms_per_s": prom_range(
+            f"avg(flink_taskmanager_job_task_operator_split_watermark_pausedTimeMsPerSecond{{{job}}})", start, end),
         "backpressured_ms_per_s": prom_range(
             f"avg by (task_name) (flink_taskmanager_job_task_backPressuredTimeMsPerSecond{{{job}}})", start, end),
         **{f"cpu_cores:{name}": prom_range(
