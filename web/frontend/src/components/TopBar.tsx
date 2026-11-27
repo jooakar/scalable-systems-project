@@ -67,8 +67,8 @@ export function TopBar({ symbols, watchlist, quotes, latestWindowEnd, connection
 
   return (
     <header className="topbar">
-      <div className="brand" aria-label="Crossover">
-        cross<span aria-hidden="true">/</span>over
+      <div className="brand" aria-label="CS-E4780">
+        CS<span aria-hidden="true">-</span>E4780
       </div>
 
       <div className="search" ref={box}>
