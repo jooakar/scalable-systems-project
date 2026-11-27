@@ -50,6 +50,13 @@ public class EmaWindowFunction
                 new ValueStateDescriptor<>("ema100", Types.DOUBLE));
     }
 
+    /** The later of two price events by trading time (falling back to update time); ties go to b. */
+    static TickEvent later(TickEvent a, TickEvent b) {
+        String timeA = a.tradingTime() != null ? a.tradingTime() : a.time();
+        String timeB = b.tradingTime() != null ? b.tradingTime() : b.time();
+        return timeA == null || (timeB != null && timeB.compareTo(timeA) >= 0) ? b : a;
+    }
+
     @Override
     public void process(
             String symbol,
@@ -57,19 +64,13 @@ public class EmaWindowFunction
             Iterable<TickEvent> events,
             Collector<EmaResult> out) throws Exception {
 
-        // Find the closing price: the last price event observed in the window,
-        // selected by the latest trading time string (falling back to update time).
-        Double closePrice = null;
-        String latestTime = null;
+        // Find the closing price: the last price event observed in the window.
+        // The window pre-reduces with later(), so this normally sees a single event.
+        TickEvent close = null;
         for (TickEvent e : events) {
-            if (e.last() != null) {
-                String eventTime = e.tradingTime() != null ? e.tradingTime() : e.time();
-                if (latestTime == null || (eventTime != null && eventTime.compareTo(latestTime) >= 0)) {
-                    closePrice = e.last();
-                    latestTime = eventTime;
-                }
-            }
+            close = close == null ? e : later(close, e);
         }
+        Double closePrice = close == null ? null : close.last();
 
         if (closePrice == null) {
             return; // no price events in this window for this symbol

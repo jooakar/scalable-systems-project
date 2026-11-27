@@ -1,41 +1,88 @@
 {
-  "annotations": { "list": [] },
+  "annotations": {
+    "list": []
+  },
   "editable": true,
   "panels": [
     {
       "type": "stat",
       "title": "HTTP requests",
-      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
-      "targets": [{ "expr": "trading_web_requests_total", "refId": "A" }]
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "trading_web_requests_total",
+          "refId": "A"
+        }
+      ]
     },
     {
       "type": "stat",
       "title": "Request failures",
-      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
-      "targets": [{ "expr": "trading_web_request_failures_total", "refId": "A" }]
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "targets": [
+        {
+          "expr": "trading_web_request_failures_total",
+          "refId": "A"
+        }
+      ]
     },
     {
       "type": "stat",
       "title": "Average request latency",
-      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
       "targets": [
         {
           "expr": "rate(trading_web_request_duration_seconds_sum[1m]) / rate(trading_web_request_duration_seconds_count[1m])",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "s" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        }
+      }
     },
     {
       "type": "timeseries",
       "title": "API request rate",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
-      "targets": [{ "expr": "rate(trading_web_requests_total[1m])", "refId": "A", "legendFormat": "requests/s" }]
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "targets": [
+        {
+          "expr": "rate(trading_web_requests_total[1m])",
+          "refId": "A",
+          "legendFormat": "requests/s"
+        }
+      ]
     },
     {
       "type": "timeseries",
       "title": "API latency",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
       "targets": [
         {
           "expr": "rate(trading_web_request_duration_seconds_sum[1m]) / rate(trading_web_request_duration_seconds_count[1m])",
@@ -43,11 +90,152 @@
           "legendFormat": "seconds"
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Flink source throughput",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(flink_taskmanager_job_task_operator_numRecordsOut{operator_name=\"Source:_kafka_ticks\"}[30s]))",
+          "legendFormat": "events/s",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Flink task busy time",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "targets": [
+        {
+          "expr": "avg by (task_name) (flink_taskmanager_job_task_busyTimeMsPerSecond) / 1000",
+          "legendFormat": "{{task_name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Container CPU",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name!=\"\"}[30s]))",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 20
+      },
+      "targets": [
+        {
+          "expr": "sum by (name) (container_memory_working_set_bytes{name!=\"\"})",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Late records dropped",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "sum(flink_taskmanager_job_task_operator_numLateRecordsDropped)",
+          "legendFormat": "dropped",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Kafka records pending",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "targets": [
+        {
+          "expr": "sum(flink_taskmanager_job_task_operator_pendingRecords)",
+          "legendFormat": "pending",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,
   "title": "Trading System Performance",
-  "time": { "from": "now-15m", "to": "now" },
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
   "timezone": "browser",
   "version": 1
 }

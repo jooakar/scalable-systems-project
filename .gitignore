@@ -6,3 +6,4 @@ data/
 result
 .direnv/
 report/main.pdf
+__pycache__/

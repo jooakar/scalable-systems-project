@@ -8,6 +8,7 @@ import java.time.ZonedDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TrendJobTest {
@@ -32,6 +33,18 @@ class TrendJobTest {
         // Valid price event
         TickEvent validPrice = new TickEvent("RDSA.NL", "E", "08-11-2021", "09:00:00.000", 42.0, "09:00:00.123", null);
         assertTrue(TrendJob.isUsablePriceEvent(validPrice));
+    }
+
+    @Test
+    void deserializerEmitsOnlyUsablePriceEvents() throws Exception {
+        TickEventDeserializer deserializer = new TickEventDeserializer();
+        TickEvent price = new TickEvent("RDSA.NL", "E", "08-11-2021", "09:00:00.000", 42.0, "09:00:00.123", null);
+        TickEvent housekeeping = new TickEvent("ADP.FR", "E", "08-11-2021", "09:00:00.000", null, null, null);
+        TickEvent zeroPrice = new TickEvent("723813.ETR", "I", "08-11-2021", "00:00:00.000", 0.0, "00:00:00.000", null);
+
+        assertEquals(price, deserializer.deserialize(price.toJson()));
+        assertNull(deserializer.deserialize(housekeeping.toJson()));
+        assertNull(deserializer.deserialize(zeroPrice.toJson()));
     }
 
     @Test

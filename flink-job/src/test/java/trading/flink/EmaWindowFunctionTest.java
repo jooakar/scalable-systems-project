@@ -2,7 +2,10 @@ package trading.flink;
 
 import org.junit.jupiter.api.Test;
 
+import trading.common.TickEvent;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 /**
  * Verifies the EMA formula used in EmaWindowFunction.
@@ -59,5 +62,18 @@ class EmaWindowFunctionTest {
         }
         assertEquals(constantPrice, ema38, 1e-6);
         assertEquals(constantPrice, ema100, 1e-6);
+    }
+
+    @Test
+    void laterPicksLatestTradingTimeAndBreaksTiesByArrival() {
+        TickEvent early = new TickEvent("ADP.FR", "E", "08-11-2021", "09:00:00.000", 10.0, "09:00:01.000", null);
+        TickEvent late = new TickEvent("ADP.FR", "E", "08-11-2021", "09:00:00.000", 11.0, "09:00:02.000", null);
+        TickEvent tie = new TickEvent("ADP.FR", "E", "08-11-2021", "09:00:00.000", 12.0, "09:00:02.000", null);
+        TickEvent noTradingTime = new TickEvent("ADP.FR", "E", "08-11-2021", "09:00:03.000", 13.0, null, null);
+
+        assertSame(late, EmaWindowFunction.later(early, late));
+        assertSame(late, EmaWindowFunction.later(late, early));
+        assertSame(tie, EmaWindowFunction.later(late, tie));
+        assertSame(noTradingTime, EmaWindowFunction.later(late, noTradingTime));
     }
 }

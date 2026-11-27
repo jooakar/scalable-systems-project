@@ -11,7 +11,13 @@
     {
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
-          packages = [ pkgs.jdk21 (pkgs.maven.override { jdk_headless = pkgs.jdk21; }) pkgs.nodejs ];
+          packages = [
+            pkgs.jdk21
+            (pkgs.maven.override { jdk_headless = pkgs.jdk21; })
+            pkgs.nodejs
+            (pkgs.python3.withPackages (ps: [ ps.matplotlib ]))
+            pkgs.typst
+          ];
         };
       });
     };

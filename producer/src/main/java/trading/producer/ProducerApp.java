@@ -14,16 +14,26 @@ import org.apache.kafka.common.serialization.StringSerializer;
 import java.io.BufferedReader;
 import java.io.File;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicLong;
 
 /** Reads Trading Data CSV files and sends every event to Kafka, keyed by symbol. */
 public class ProducerApp {
+
+    private static final long WINDOW_MILLIS = Duration.ofMinutes(5).toMillis();
+    private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd-MM-yyyy");
+    private static final ZoneId ZONE = ZoneId.of("Europe/Paris");
 
     public static void main(String[] args) throws Exception {
         if (args.length == 0) {
@@ -34,6 +44,11 @@ public class ProducerApp {
         String topic = env("TOPIC", TickEvent.TOPIC);
         int partitions = Integer.parseInt(env("PARTITIONS", "4"));
         long rate = Long.parseLong(env("RATE", "0"));
+        // For latency measurements: when each window could first be evaluated, i.e. when the first
+        // price event at or after its end was sent, as "window end epoch ms,wall clock epoch ms"
+        String windowLog = env("WINDOW_LOG", "");
+        List<String> windowStarts = new ArrayList<>();
+        long lastWindow = Long.MIN_VALUE;
 
         createTopic(servers, topic, partitions);
 
@@ -62,6 +77,13 @@ public class ProducerApp {
                             }
                         });
                         sent++;
+                        if (!windowLog.isEmpty() && event.last() != null && event.last() > 0) {
+                            long window = Math.floorDiv(eventMillis(event), WINDOW_MILLIS);
+                            if (window > lastWindow && window != Long.MIN_VALUE) {
+                                windowStarts.add(window * WINDOW_MILLIS + "," + System.currentTimeMillis());
+                                lastWindow = window;
+                            }
+                        }
 
                         if (rate > 0) {
                             long aheadMillis = sent * 1000 / rate - Duration.ofNanos(System.nanoTime() - start).toMillis();
@@ -77,6 +99,9 @@ public class ProducerApp {
             }
         }
 
+        if (!windowLog.isEmpty()) {
+            Files.writeString(Path.of(windowLog), windowStarts.stream().collect(Collectors.joining("\n", "", "\n")));
+        }
         double seconds = (System.nanoTime() - start) / 1e9;
         System.out.printf("Done: sent %d events in %.1f s (%.0f events/s), %d failures%n",
                 sent, seconds, sent / seconds, failures.get());
@@ -93,6 +118,20 @@ public class ProducerApp {
                 f[21].isBlank() ? null : Double.valueOf(f[21]),
                 f[23].isBlank() ? null : f[23],
                 f[26].isBlank() ? null : f[26]);
+    }
+
+    /**
+     * Event time as the Flink job assigns it: trading date and time, else system date and time.
+     * Long.MIN_VALUE for events the job drops because their time is missing or invalid.
+     */
+    static long eventMillis(TickEvent event) {
+        String date = event.tradingDate() != null ? event.tradingDate() : event.date();
+        String time = event.tradingTime() != null ? event.tradingTime() : event.time();
+        try {
+            return LocalDate.parse(date, DATE_FMT).atTime(LocalTime.parse(time)).atZone(ZONE).toInstant().toEpochMilli();
+        } catch (RuntimeException exception) {
+            return Long.MIN_VALUE;
+        }
     }
 
     /** Directories are expanded to their CSV files, sorted by name so the days are sent in order. */

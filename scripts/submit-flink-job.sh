@@ -39,7 +39,7 @@ echo "Uploaded jar: ${JAR_ID}"
 
 # Write the request body to a temp file to avoid shell quoting issues
 REQUEST_BODY=/tmp/run-request.json
-printf '{"entryClass":"%s"}' "$ENTRY_CLASS" > "$REQUEST_BODY"
+printf '{"entryClass":"%s","parallelism":%s}' "$ENTRY_CLASS" "${PARALLELISM:-1}" > "$REQUEST_BODY"
 
 # Submit the job
 echo "Submitting job (entry class: ${ENTRY_CLASS}) ..."
